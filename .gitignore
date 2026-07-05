@@ -1,0 +1,60 @@
+# Unreal Engine generated files
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Unreal local user files
+*.opensdf
+*.sdf
+*.suo
+*.user
+*.userosscache
+*.sln.DotSettings.user
+*.VC.db
+*.VC.opendb
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.code-workspace
+
+# C++ build outputs
+*.obj
+*.o
+*.lo
+*.la
+*.lib
+*.a
+*.dll
+*.dylib
+*.so
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.ipdb
+*.iobj
+
+# CMake / Ninja / Make
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+build/
+out/
+
+# Logs and diagnostics
+*.log
+*.tlog
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
