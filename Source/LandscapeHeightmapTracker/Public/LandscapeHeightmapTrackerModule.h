@@ -23,6 +23,10 @@ public:
 
 	static FOnViewportClickResult& OnViewportClickResult();
 	static void SetTrackingModeEnabled(bool bEnabled);
+	static bool IsTrackingModeEnabled();
+	static void SetReverseMarker(const FVector& WorldPosition, AActor* OwnerActor);
+	static void ClearReverseMarker();
+	static bool GetReverseMarker(FVector& OutWorldPosition);
 
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;

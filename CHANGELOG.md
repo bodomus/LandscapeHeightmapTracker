@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added 2D heightmap click to 3D Landscape surface tracking with an editor-only vertical viewport line.
+- Added reverse UV-to-local mapping, fitted image hit testing, and assigned-Landscape vertical multi-trace helpers.
+- Added automation coverage for reverse mapping, fitted image clicks, and vertical trace segment construction.
 - Fixed orthographic editor viewport click traces by using projection-aware trace segment construction.
 - Added viewport trace automation tests for Perspective, Orthographic, reversed direction, and invalid direction cases.
 - Documented orthographic viewport validation scenarios.

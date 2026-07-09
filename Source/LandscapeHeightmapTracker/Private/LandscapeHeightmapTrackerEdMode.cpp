@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
 #include "LandscapeHeightmapTrackerModule.h"
+#include "PrimitiveDrawInterface.h"
 #include "ViewportTraceRayBuilder.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogLandscapeHeightmapTrackerEdMode, Log, All);
@@ -14,11 +15,35 @@ bool FLandscapeHeightmapTrackerEdMode::InputKey(FEditorViewportClient* ViewportC
 {
 	if (Key == EKeys::LeftMouseButton && Event == IE_Pressed)
 	{
-		TraceLandscapeClick(ViewportClient, Viewport);
+		if (FLandscapeHeightmapTrackerModule::IsTrackingModeEnabled())
+		{
+			TraceLandscapeClick(ViewportClient, Viewport);
+		}
 		return false;
 	}
 
 	return FEdMode::InputKey(ViewportClient, Viewport, Key, Event);
+}
+
+void FLandscapeHeightmapTrackerEdMode::Render(const FSceneView* View, FViewport* Viewport, FPrimitiveDrawInterface* PDI)
+{
+	FEdMode::Render(View, Viewport, PDI);
+
+	if (!PDI)
+	{
+		return;
+	}
+
+	FVector MarkerBase;
+	if (!FLandscapeHeightmapTrackerModule::GetReverseMarker(MarkerBase))
+	{
+		return;
+	}
+
+	constexpr double MarkerHeight = 10000.0;
+	const FVector MarkerTop = MarkerBase + FVector(0.0, 0.0, MarkerHeight);
+	PDI->DrawLine(MarkerBase, MarkerTop, FLinearColor::Yellow, SDPG_Foreground, 4.0f, 0.0f, true);
+	PDI->DrawPoint(MarkerBase, FLinearColor::Yellow, 10.0f, SDPG_Foreground);
 }
 
 bool FLandscapeHeightmapTrackerEdMode::TraceLandscapeClick(FEditorViewportClient* ViewportClient, FViewport* Viewport) const

@@ -77,4 +77,47 @@ bool FLandscapeCoordinateMapperOptionsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLandscapeCoordinateMapperReverseMappingTest, "LandscapeHeightmapTracker.ReverseMapping.UVToLocal", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLandscapeCoordinateMapperReverseMappingTest::RunTest(const FString& Parameters)
+{
+	FLandscapeTrackerMappingOptions Options;
+	Options.bFlipY = false;
+
+	const FLandscapeTrackerBounds SquareBounds{FVector2D(0.0, 0.0), FVector2D(1000.0, 1000.0)};
+	const FLandscapeTrackerReverseMappingResult Center = FLandscapeCoordinateMapper::MapUVToLocalPosition(SquareBounds, FVector2D(0.5, 0.5), Options);
+	TestTrue(TEXT("Center maps successfully"), Center.bIsValid);
+	TestEqual(TEXT("Center Local X"), Center.LocalPosition.X, 500.0);
+	TestEqual(TEXT("Center Local Y"), Center.LocalPosition.Y, 500.0);
+
+	TestEqual(TEXT("Min corner"), FLandscapeCoordinateMapper::MapUVToLocalPosition(SquareBounds, FVector2D(0.0, 0.0), Options).LocalPosition, FVector(0.0, 0.0, 0.0));
+	TestEqual(TEXT("Max X min Y corner"), FLandscapeCoordinateMapper::MapUVToLocalPosition(SquareBounds, FVector2D(1.0, 0.0), Options).LocalPosition, FVector(1000.0, 0.0, 0.0));
+	TestEqual(TEXT("Min X max Y corner"), FLandscapeCoordinateMapper::MapUVToLocalPosition(SquareBounds, FVector2D(0.0, 1.0), Options).LocalPosition, FVector(0.0, 1000.0, 0.0));
+	TestEqual(TEXT("Max corner"), FLandscapeCoordinateMapper::MapUVToLocalPosition(SquareBounds, FVector2D(1.0, 1.0), Options).LocalPosition, FVector(1000.0, 1000.0, 0.0));
+
+	Options.bFlipX = true;
+	const FLandscapeTrackerReverseMappingResult FlipX = FLandscapeCoordinateMapper::MapUVToLocalPosition(SquareBounds, FVector2D(0.25, 0.5), Options);
+	TestEqual(TEXT("Flip X Landscape U"), FlipX.LandscapeUV.X, 0.75);
+	TestEqual(TEXT("Flip X Local X"), FlipX.LocalPosition.X, 750.0);
+
+	Options.bFlipX = false;
+	Options.bFlipY = true;
+	const FLandscapeTrackerReverseMappingResult FlipY = FLandscapeCoordinateMapper::MapUVToLocalPosition(SquareBounds, FVector2D(0.5, 0.25), Options);
+	TestEqual(TEXT("Flip Y Landscape V"), FlipY.LandscapeUV.Y, 0.75);
+	TestEqual(TEXT("Flip Y Local Y"), FlipY.LocalPosition.Y, 750.0);
+
+	Options.bFlipY = false;
+	const FLandscapeTrackerBounds RectBounds{FVector2D(0.0, 0.0), FVector2D(2000.0, 1000.0)};
+	const FLandscapeTrackerReverseMappingResult Rect = FLandscapeCoordinateMapper::MapUVToLocalPosition(RectBounds, FVector2D(0.25, 0.75), Options);
+	TestTrue(TEXT("Non-square maps successfully"), Rect.bIsValid);
+	TestEqual(TEXT("Non-square Local X"), Rect.LocalPosition.X, 500.0);
+	TestEqual(TEXT("Non-square Local Y"), Rect.LocalPosition.Y, 750.0);
+
+	const FLandscapeTrackerBounds InvalidBounds{FVector2D(0.0, 0.0), FVector2D(0.0, 1000.0)};
+	TestFalse(TEXT("Invalid bounds rejected"), FLandscapeCoordinateMapper::MapUVToLocalPosition(InvalidBounds, FVector2D(0.5, 0.5), Options).bIsValid);
+	TestFalse(TEXT("Outside UV rejected"), FLandscapeCoordinateMapper::MapUVToLocalPosition(SquareBounds, FVector2D(1.25, 0.5), Options).bIsValid);
+
+	return true;
+}
+
 #endif

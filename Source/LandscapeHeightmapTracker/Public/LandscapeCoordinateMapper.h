@@ -29,6 +29,15 @@ struct FLandscapeTrackerMappingResult
 	FString FailureReason;
 };
 
+struct FLandscapeTrackerReverseMappingResult
+{
+	bool bIsValid = false;
+	FVector2D DisplayUV = FVector2D::ZeroVector;
+	FVector2D LandscapeUV = FVector2D::ZeroVector;
+	FVector LocalPosition = FVector::ZeroVector;
+	FString FailureReason;
+};
+
 class FLandscapeCoordinateMapper
 {
 public:
@@ -43,6 +52,11 @@ public:
 		const FLandscapeTrackerBounds& LocalBounds,
 		const FVector& LocalPosition,
 		const FIntPoint& ImageSize,
+		const FLandscapeTrackerMappingOptions& Options);
+
+	static FLandscapeTrackerReverseMappingResult MapUVToLocalPosition(
+		const FLandscapeTrackerBounds& LocalBounds,
+		const FVector2D& DisplayUV,
 		const FLandscapeTrackerMappingOptions& Options);
 
 	static FIntPoint UVToPixel(const FVector2D& UV, const FIntPoint& ImageSize);
