@@ -97,7 +97,7 @@ The final World Z comes from `FHitResult::ImpactPoint` on the current assigned L
 
 ## Reverse Marker Rendering
 
-The module stores a transient reverse marker world position and weak owner actor. `FLandscapeHeightmapTrackerEdMode::Render()` draws a foreground vertical line and point via `FPrimitiveDrawInterface`. No Actor, Component, mesh, decal, Niagara system, UObject marker, transaction, or level object is created.
+The module stores a transient reverse marker world position and weak owner actor. `FLandscapeHeightmapTrackerEdMode::Render()` draws one foreground vertical line via `FPrimitiveDrawInterface`. No Actor, Component, mesh, decal, Niagara system, UObject marker, transaction, or level object is created.
 
 The marker is cleared when the panel is destroyed, when all markers are cleared, when a new Landscape is assigned, when the owner actor becomes invalid, and during module shutdown.
 

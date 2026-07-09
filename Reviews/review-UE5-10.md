@@ -107,13 +107,13 @@ The PNG is used only for 2D XY selection. Final World Z comes from `FHitResult::
 
 ## 11. Vertical Line Rendering Strategy
 
-`FLandscapeHeightmapTrackerEdMode::Render()` draws a foreground vertical line and point with `FPrimitiveDrawInterface`. The module keeps the EdMode active while either click tracking is enabled or a reverse marker exists.
+`FLandscapeHeightmapTrackerEdMode::Render()` draws one foreground vertical line with `FPrimitiveDrawInterface`. The module keeps the EdMode active while either click tracking is enabled or a reverse marker exists.
 
 ## 12. Lifecycle Handling
 
 - Landscape is stored as weak pointer in the panel.
 - Reverse marker owner is stored as weak actor pointer in the module.
-- Marker clears on panel destruction, clear-all, Landscape reassignment, invalid owner, and module shutdown.
+- Marker clears on panel destruction, clear-all, Landscape reassignment, invalid owner, and module shutdown. Invalid-owner cleanup is deferred from `Render()` into EdMode `Tick()` so mode activation/redraw state changes do not run directly inside the draw path.
 - Tracking toggle no longer controls reverse marker visibility.
 
 ## 13. Tests Added

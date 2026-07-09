@@ -27,6 +27,7 @@ public:
 	static void SetReverseMarker(const FVector& WorldPosition, AActor* OwnerActor);
 	static void ClearReverseMarker();
 	static bool GetReverseMarker(FVector& OutWorldPosition);
+	static bool ConsumeReverseMarkerCleanupRequest();
 
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;

@@ -25,6 +25,16 @@ bool FLandscapeHeightmapTrackerEdMode::InputKey(FEditorViewportClient* ViewportC
 	return FEdMode::InputKey(ViewportClient, Viewport, Key, Event);
 }
 
+void FLandscapeHeightmapTrackerEdMode::Tick(FEditorViewportClient* ViewportClient, float DeltaTime)
+{
+	FEdMode::Tick(ViewportClient, DeltaTime);
+
+	if (FLandscapeHeightmapTrackerModule::ConsumeReverseMarkerCleanupRequest())
+	{
+		FLandscapeHeightmapTrackerModule::ClearReverseMarker();
+	}
+}
+
 void FLandscapeHeightmapTrackerEdMode::Render(const FSceneView* View, FViewport* Viewport, FPrimitiveDrawInterface* PDI)
 {
 	FEdMode::Render(View, Viewport, PDI);
@@ -43,7 +53,6 @@ void FLandscapeHeightmapTrackerEdMode::Render(const FSceneView* View, FViewport*
 	constexpr double MarkerHeight = 10000.0;
 	const FVector MarkerTop = MarkerBase + FVector(0.0, 0.0, MarkerHeight);
 	PDI->DrawLine(MarkerBase, MarkerTop, FLinearColor::Yellow, SDPG_Foreground, 4.0f, 0.0f, true);
-	PDI->DrawPoint(MarkerBase, FLinearColor::Yellow, 10.0f, SDPG_Foreground);
 }
 
 bool FLandscapeHeightmapTrackerEdMode::TraceLandscapeClick(FEditorViewportClient* ViewportClient, FViewport* Viewport) const

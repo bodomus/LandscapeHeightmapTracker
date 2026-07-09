@@ -20,6 +20,7 @@ const FName FLandscapeHeightmapTrackerModule::EditorModeId(TEXT("EM_LandscapeHei
 static FLandscapeHeightmapTrackerModule::FOnViewportClickResult GOnViewportClickResult;
 static bool GIsTrackingModeEnabled = false;
 static bool GHasReverseMarker = false;
+static bool GReverseMarkerNeedsCleanup = false;
 static FVector GReverseMarkerWorldPosition = FVector::ZeroVector;
 static TWeakObjectPtr<AActor> GReverseMarkerOwner;
 
@@ -77,6 +78,7 @@ void FLandscapeHeightmapTrackerModule::SetReverseMarker(const FVector& WorldPosi
 	GReverseMarkerWorldPosition = WorldPosition;
 	GReverseMarkerOwner = OwnerActor;
 	GHasReverseMarker = true;
+	GReverseMarkerNeedsCleanup = false;
 	UpdateEditorModeActivation();
 	RequestViewportRedraw();
 }
@@ -84,6 +86,7 @@ void FLandscapeHeightmapTrackerModule::SetReverseMarker(const FVector& WorldPosi
 void FLandscapeHeightmapTrackerModule::ClearReverseMarker()
 {
 	GHasReverseMarker = false;
+	GReverseMarkerNeedsCleanup = false;
 	GReverseMarkerWorldPosition = FVector::ZeroVector;
 	GReverseMarkerOwner.Reset();
 	UpdateEditorModeActivation();
@@ -100,10 +103,22 @@ bool FLandscapeHeightmapTrackerModule::GetReverseMarker(FVector& OutWorldPositio
 	if (!GReverseMarkerOwner.IsValid())
 	{
 		GHasReverseMarker = false;
+		GReverseMarkerNeedsCleanup = true;
 		return false;
 	}
 
 	OutWorldPosition = GReverseMarkerWorldPosition;
+	return true;
+}
+
+bool FLandscapeHeightmapTrackerModule::ConsumeReverseMarkerCleanupRequest()
+{
+	if (!GReverseMarkerNeedsCleanup)
+	{
+		return false;
+	}
+
+	GReverseMarkerNeedsCleanup = false;
 	return true;
 }
 
