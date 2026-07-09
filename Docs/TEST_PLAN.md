@@ -7,9 +7,12 @@ Run editor automation tests matching:
 ```text
 LandscapeHeightmapTracker.Mapper.*
 LandscapeHeightmapTracker.ViewportTrace.*
+LandscapeHeightmapTracker.ReverseMapping.*
 ```
 
 The mapper tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
+
+The reverse mapping tests cover UV-to-local center, corners, Flip X inversion, Flip Y inversion, non-square bounds, invalid bounds, outside UV rejection, fitted-image click hit testing, and finite vertical trace segment construction.
 
 The viewport trace tests cover:
 
@@ -100,3 +103,74 @@ Where terrain visibility makes the result meaningful, repeat click validation fr
 - Right.
 
 The trace should be geometrically valid for each view, but side views can be visually ambiguous on steep or occluded terrain.
+
+## Scenario 11 - Reverse Mapping Basic Center
+
+1. Assign a known 1009x1009 Landscape.
+2. Load the source PNG.
+3. Click the center of the 2D image.
+4. Verify a vertical editor-only line appears near Landscape center.
+5. Verify diagnostics show Display UV, Landscape UV, Local XY, and World XYZ.
+
+## Scenario 12 - Recognisable Landmarks
+
+Click these 2D locations and verify the vertical line appears at matching 3D locations:
+
+- Mountain peak.
+- Valley.
+- Ridge.
+- Depression.
+- Corner regions.
+
+## Scenario 13 - Reverse Mapping Moved Landscape
+
+1. Move the Landscape Actor.
+2. Repeat center and landmark clicks.
+3. Verify the vertical line follows the moved Landscape.
+
+## Scenario 14 - Reverse Mapping Non-default XY Scale
+
+1. Use or create a Landscape with non-default XY scale.
+2. Repeat center and landmark clicks.
+3. Verify Local XY to World XY mapping remains correct.
+
+## Scenario 15 - Sculpted Landscape Surface
+
+1. Import PNG.
+2. Sculpt one area up or down.
+3. Click the corresponding 2D XY.
+4. Verify the vertical line base uses the current sculpted Landscape surface Z, not the PNG value.
+
+## Scenario 16 - Blocking Mesh
+
+1. Place a Static Mesh above the Landscape.
+2. Click the underlying 2D location.
+3. Verify the multi-trace still finds the assigned Landscape behind the blocker.
+
+## Scenario 17 - Letterbox Input
+
+1. Resize the tracker tab to a wide aspect ratio.
+2. Click image center and verify correct mapping.
+3. Click empty letterbox or pillarbox area.
+4. Verify the click is rejected and the 3D marker does not move.
+
+## Scenario 18 - Clear Marker
+
+1. Create a 2D marker with a 3D Landscape click.
+2. Create a 3D marker with a 2D heightmap click.
+3. Click `Clear All Markers`.
+4. Verify both the 2D crosshair and 3D vertical line disappear immediately.
+
+## Scenario 19 - Map Change / Landscape Deletion
+
+1. Create a reverse marker.
+2. Switch map or delete the assigned Landscape.
+3. Verify no crash and invalid marker state is not drawn.
+
+## Scenario 20 - Regression
+
+Re-test existing 3D-to-2D flows:
+
+- Perspective center, corners, peak, and valley.
+- Top view center, corners, peak, and valley.
+- Flip X and Flip Y.

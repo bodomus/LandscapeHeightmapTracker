@@ -23,6 +23,7 @@ private:
 	FReply ClearMarker();
 	void OnObjectSelected(const FAssetData& AssetData);
 	void OnViewportClick(const FLandscapeHeightmapTrackerModule::FViewportClickResult& Click);
+	void OnHeightmapClicked(FVector2D DisplayUV);
 	void SetTrackingEnabled(ECheckBoxState NewState);
 	void SetFlipX(ECheckBoxState NewState);
 	void SetFlipY(ECheckBoxState NewState);
@@ -52,11 +53,14 @@ private:
 	TWeakObjectPtr<ALandscapeProxy> AssignedLandscape;
 	FLandscapeTrackerBounds LocalBounds;
 	FLandscapeTrackerMappingResult LastMapping;
+	FVector2D MarkerUV = FVector2D::ZeroVector;
+	FVector2D LastLandscapeUV = FVector2D::ZeroVector;
 	FIntPoint ImageSize = FIntPoint::ZeroValue;
 	FString ImagePath;
 	FString ImageFormat;
 	FText StatusText;
 	bool bHasMarker = false;
+	bool bHasLandscapeUV = false;
 	bool bTrackClicks = false;
 	bool bFlipX = false;
 	bool bFlipY = true;

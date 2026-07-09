@@ -18,6 +18,44 @@ const FName FLandscapeHeightmapTrackerModule::PluginTabName(TEXT("LandscapeHeigh
 const FName FLandscapeHeightmapTrackerModule::EditorModeId(TEXT("EM_LandscapeHeightmapTracker"));
 
 static FLandscapeHeightmapTrackerModule::FOnViewportClickResult GOnViewportClickResult;
+static bool GIsTrackingModeEnabled = false;
+static bool GHasReverseMarker = false;
+static bool GReverseMarkerNeedsCleanup = false;
+static FVector GReverseMarkerWorldPosition = FVector::ZeroVector;
+static TWeakObjectPtr<AActor> GReverseMarkerOwner;
+
+namespace
+{
+void RequestViewportRedraw()
+{
+	if (GEditor)
+	{
+		GEditor->RedrawAllViewports(false);
+	}
+}
+
+void UpdateEditorModeActivation()
+{
+	if (!GEditor)
+	{
+		return;
+	}
+
+	FEditorModeTools& ModeTools = GLevelEditorModeTools();
+	const bool bShouldBeActive = GIsTrackingModeEnabled || GHasReverseMarker;
+	if (bShouldBeActive)
+	{
+		if (!ModeTools.IsModeActive(FLandscapeHeightmapTrackerModule::EditorModeId))
+		{
+			ModeTools.ActivateMode(FLandscapeHeightmapTrackerModule::EditorModeId);
+		}
+	}
+	else if (ModeTools.IsModeActive(FLandscapeHeightmapTrackerModule::EditorModeId))
+	{
+		ModeTools.DeactivateMode(FLandscapeHeightmapTrackerModule::EditorModeId);
+	}
+}
+}
 
 FLandscapeHeightmapTrackerModule::FOnViewportClickResult& FLandscapeHeightmapTrackerModule::OnViewportClickResult()
 {
@@ -26,23 +64,62 @@ FLandscapeHeightmapTrackerModule::FOnViewportClickResult& FLandscapeHeightmapTra
 
 void FLandscapeHeightmapTrackerModule::SetTrackingModeEnabled(bool bEnabled)
 {
-	if (!GEditor)
+	GIsTrackingModeEnabled = bEnabled;
+	UpdateEditorModeActivation();
+}
+
+bool FLandscapeHeightmapTrackerModule::IsTrackingModeEnabled()
+{
+	return GIsTrackingModeEnabled;
+}
+
+void FLandscapeHeightmapTrackerModule::SetReverseMarker(const FVector& WorldPosition, AActor* OwnerActor)
+{
+	GReverseMarkerWorldPosition = WorldPosition;
+	GReverseMarkerOwner = OwnerActor;
+	GHasReverseMarker = true;
+	GReverseMarkerNeedsCleanup = false;
+	UpdateEditorModeActivation();
+	RequestViewportRedraw();
+}
+
+void FLandscapeHeightmapTrackerModule::ClearReverseMarker()
+{
+	GHasReverseMarker = false;
+	GReverseMarkerNeedsCleanup = false;
+	GReverseMarkerWorldPosition = FVector::ZeroVector;
+	GReverseMarkerOwner.Reset();
+	UpdateEditorModeActivation();
+	RequestViewportRedraw();
+}
+
+bool FLandscapeHeightmapTrackerModule::GetReverseMarker(FVector& OutWorldPosition)
+{
+	if (!GHasReverseMarker)
 	{
-		return;
+		return false;
 	}
 
-	FEditorModeTools& ModeTools = GLevelEditorModeTools();
-	if (bEnabled)
+	if (!GReverseMarkerOwner.IsValid())
 	{
-		if (!ModeTools.IsModeActive(EditorModeId))
-		{
-			ModeTools.ActivateMode(EditorModeId);
-		}
+		GHasReverseMarker = false;
+		GReverseMarkerNeedsCleanup = true;
+		return false;
 	}
-	else if (ModeTools.IsModeActive(EditorModeId))
+
+	OutWorldPosition = GReverseMarkerWorldPosition;
+	return true;
+}
+
+bool FLandscapeHeightmapTrackerModule::ConsumeReverseMarkerCleanupRequest()
+{
+	if (!GReverseMarkerNeedsCleanup)
 	{
-		ModeTools.DeactivateMode(EditorModeId);
+		return false;
 	}
+
+	GReverseMarkerNeedsCleanup = false;
+	return true;
 }
 
 void FLandscapeHeightmapTrackerModule::StartupModule()
@@ -76,6 +153,7 @@ void FLandscapeHeightmapTrackerModule::ShutdownModule()
 	UE_LOG(LogLandscapeHeightmapTracker, Log, TEXT("LandscapeHeightmapTracker shutdown."));
 
 	SetTrackingModeEnabled(false);
+	ClearReverseMarker();
 	GOnViewportClickResult.Clear();
 
 	UToolMenus::UnRegisterStartupCallback(this);

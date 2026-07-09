@@ -1,6 +1,6 @@
 # LandscapeHeightmapTracker
 
-LandscapeHeightmapTracker is an Unreal Engine 5.7 Editor plugin that maps clicked positions on a 3D Landscape to corresponding coordinates on the source 2D heightmap.
+LandscapeHeightmapTracker is an Unreal Engine 5.7 Editor plugin that maps positions between a 3D Landscape and its source 2D heightmap.
 
 ## Installation
 
@@ -36,6 +36,17 @@ Select Landscape
 -> Inspect marker and coordinates
 ```
 
+The reverse workflow is also supported:
+
+```text
+Select Landscape
+-> Open Tracker
+-> Use Selected Landscape
+-> Load Heightmap
+-> Click the 2D heightmap image
+-> Inspect the vertical editor-only line in the 3D viewport
+```
+
 The normal workflow does not require manually entering Landscape dimensions. The plugin reads Landscape-local extents from the selected `ALandscapeProxy`.
 
 ## Mapping Convention
@@ -52,6 +63,10 @@ World hit position
 ```
 
 `Flip Y` defaults to enabled because PNG display coordinates are top-left oriented while Landscape local Y commonly reads as bottom-to-top for source heightmaps. Use the visible Flip controls if the imported terrain orientation differs.
+
+For 2D heightmap clicks, the plugin uses the fitted image rectangle that Slate actually draws, rejects clicks in letterbox or pillarbox space, undoes Flip X / Flip Y, maps UV into Landscape-local XY bounds, transforms that point through the assigned Landscape actor transform, then runs a finite vertical `LineTraceMultiByChannel`.
+
+The 3D marker's World Z comes from the current assigned Landscape surface hit. PNG grayscale values are not used to calculate height, so sculpted Landscape changes are reflected when collision is up to date.
 
 ## Limitations
 

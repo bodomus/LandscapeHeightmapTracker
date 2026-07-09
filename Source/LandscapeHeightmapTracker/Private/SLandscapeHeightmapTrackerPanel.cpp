@@ -4,13 +4,17 @@
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Engine/Texture2D.h"
+#include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
+#include "HeightmapImageClickMapper.h"
 #include "IDesktopPlatform.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
+#include "InputCoreTypes.h"
 #include "Landscape.h"
 #include "LandscapeHeightmapTrackerModule.h"
 #include "LandscapeProxy.h"
+#include "LandscapeSurfaceTraceHelper.h"
 #include "LandscapeTrackerSettings.h"
 #include "Misc/FileHelper.h"
 #include "Modules/ModuleManager.h"
@@ -40,6 +44,9 @@ public:
 		SLATE_ATTRIBUTE(const FSlateBrush*, ImageBrush)
 		SLATE_ATTRIBUTE(FVector2D, MarkerUV)
 		SLATE_ATTRIBUTE(bool, HasMarker)
+		SLATE_EVENT(FSimpleDelegate, OnUnavailableClicked)
+		SLATE_EVENT(FSimpleDelegate, OnOutsideImageClicked)
+		SLATE_EVENT(TDelegate<void(FVector2D)>, OnHeightmapClicked)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs)
@@ -47,6 +54,9 @@ public:
 		ImageBrush = InArgs._ImageBrush;
 		MarkerUV = InArgs._MarkerUV;
 		HasMarker = InArgs._HasMarker;
+		OnUnavailableClicked = InArgs._OnUnavailableClicked;
+		OnOutsideImageClicked = InArgs._OnOutsideImageClicked;
+		OnHeightmapClicked = InArgs._OnHeightmapClicked;
 	}
 
 	virtual FVector2D ComputeDesiredSize(float LayoutScaleMultiplier) const override
@@ -62,29 +72,22 @@ public:
 			return LayerId;
 		}
 
-		const FVector2D WidgetSize = AllottedGeometry.GetLocalSize();
-		const float ImageAspect = Brush->ImageSize.X / Brush->ImageSize.Y;
-		const float WidgetAspect = WidgetSize.X / FMath::Max(WidgetSize.Y, 1.0f);
-
-		FVector2D DrawSize = WidgetSize;
-		if (WidgetAspect > ImageAspect)
+		const FHeightmapFittedImageRect ImageRect = FHeightmapImageClickMapper::CalculateFittedImageRect(
+			AllottedGeometry.GetLocalSize(),
+			Brush->ImageSize);
+		if (!ImageRect.bIsValid)
 		{
-			DrawSize.X = WidgetSize.Y * ImageAspect;
-		}
-		else
-		{
-			DrawSize.Y = WidgetSize.X / ImageAspect;
+			return LayerId;
 		}
 
-		const FVector2D DrawOffset = (WidgetSize - DrawSize) * 0.5f;
-		const FPaintGeometry ImageGeometry = AllottedGeometry.ToPaintGeometry(DrawSize, FSlateLayoutTransform(DrawOffset));
+		const FPaintGeometry ImageGeometry = AllottedGeometry.ToPaintGeometry(ImageRect.DrawSize, FSlateLayoutTransform(ImageRect.DrawOffset));
 
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId, ImageGeometry, Brush, ESlateDrawEffect::None, InWidgetStyle.GetColorAndOpacityTint());
 
 		if (HasMarker.Get())
 		{
 			const FVector2D UV = MarkerUV.Get();
-			const FVector2D MarkerCenter = DrawOffset + FVector2D(UV.X * DrawSize.X, UV.Y * DrawSize.Y);
+			const FVector2D MarkerCenter = ImageRect.DrawOffset + FVector2D(UV.X * ImageRect.DrawSize.X, UV.Y * ImageRect.DrawSize.Y);
 			const float Radius = 8.0f;
 			const FLinearColor Outer = FLinearColor::Black;
 			const FLinearColor Inner = FLinearColor::Yellow;
@@ -105,10 +108,43 @@ public:
 		return LayerId + 2;
 	}
 
+	virtual FReply OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override
+	{
+		if (MouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+		{
+			return FReply::Unhandled();
+		}
+
+		const FSlateBrush* Brush = ImageBrush.Get();
+		if (!Brush || Brush->GetResourceObject() == nullptr || Brush->ImageSize.X <= 0.0f || Brush->ImageSize.Y <= 0.0f)
+		{
+			OnUnavailableClicked.ExecuteIfBound();
+			return FReply::Handled();
+		}
+
+		const FVector2D LocalPosition = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+		const FHeightmapFittedImageRect ImageRect = FHeightmapImageClickMapper::CalculateFittedImageRect(MyGeometry.GetLocalSize(), Brush->ImageSize);
+		const FHeightmapClickMappingResult ClickMapping = FHeightmapImageClickMapper::MapLocalPositionToDisplayUV(LocalPosition, ImageRect);
+
+		if (ClickMapping.bIsValid)
+		{
+			OnHeightmapClicked.ExecuteIfBound(ClickMapping.DisplayUV);
+		}
+		else
+		{
+			OnOutsideImageClicked.ExecuteIfBound();
+		}
+
+		return FReply::Handled();
+	}
+
 private:
 	TAttribute<const FSlateBrush*> ImageBrush;
 	TAttribute<FVector2D> MarkerUV;
 	TAttribute<bool> HasMarker;
+	FSimpleDelegate OnUnavailableClicked;
+	FSimpleDelegate OnOutsideImageClicked;
+	TDelegate<void(FVector2D)> OnHeightmapClicked;
 };
 
 TSharedRef<SWidget> MakeLabelValue(const FText& Label, TAttribute<FText> Value)
@@ -208,8 +244,11 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 				[
 					SNew(SHeightmapTrackerImageView)
 					.ImageBrush_Lambda([this]() { return HeightmapTexture ? &HeightmapBrush : nullptr; })
-					.MarkerUV_Lambda([this]() { return LastMapping.NormalizedUV; })
+					.MarkerUV_Lambda([this]() { return MarkerUV; })
 					.HasMarker_Lambda([this]() { return bHasMarker; })
+					.OnUnavailableClicked(FSimpleDelegate::CreateLambda([this]() { UpdateStatus(LOCTEXT("NoHeightmapLoadedClick", "No heightmap loaded.")); }))
+					.OnOutsideImageClicked(FSimpleDelegate::CreateLambda([this]() { UpdateStatus(LOCTEXT("OutsideImageClick", "Click is outside the heightmap image area.")); }))
+					.OnHeightmapClicked(TDelegate<void(FVector2D)>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::OnHeightmapClicked))
 				]
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
@@ -250,7 +289,7 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
 			[
 				SNew(SButton)
-				.Text(LOCTEXT("ClearMarker", "Clear Marker"))
+				.Text(LOCTEXT("ClearMarker", "Clear All Markers"))
 				.OnClicked(this, &SLandscapeHeightmapTrackerPanel::ClearMarker)
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
@@ -293,6 +332,7 @@ SLandscapeHeightmapTrackerPanel::~SLandscapeHeightmapTrackerPanel()
 {
 	FLandscapeHeightmapTrackerModule::OnViewportClickResult().Remove(ClickDelegateHandle);
 	FLandscapeHeightmapTrackerModule::SetTrackingModeEnabled(false);
+	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
 	ReleaseTexture();
 }
 
@@ -368,8 +408,11 @@ FReply SLandscapeHeightmapTrackerPanel::LoadHeightmap()
 FReply SLandscapeHeightmapTrackerPanel::ClearMarker()
 {
 	bHasMarker = false;
+	bHasLandscapeUV = false;
 	LastMapping = FLandscapeTrackerMappingResult();
-	UpdateStatus(LOCTEXT("MarkerCleared", "Marker cleared."));
+	LastLandscapeUV = FVector2D::ZeroVector;
+	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
+	UpdateStatus(LOCTEXT("MarkerCleared", "All markers cleared."));
 	return FReply::Handled();
 }
 
@@ -407,6 +450,8 @@ void SLandscapeHeightmapTrackerPanel::OnViewportClick(const FLandscapeHeightmapT
 	if (LastMapping.bIsValid)
 	{
 		bHasMarker = true;
+		bHasLandscapeUV = false;
+		MarkerUV = LastMapping.NormalizedUV;
 		UpdateStatus(LOCTEXT("MappedClick", "Landscape click mapped to heightmap."));
 		UE_LOG(LogLandscapeHeightmapTrackerPanel, Log, TEXT("Valid click mapped to U=%f V=%f Pixel=(%d,%d)."), LastMapping.NormalizedUV.X, LastMapping.NormalizedUV.Y, LastMapping.Pixel.X, LastMapping.Pixel.Y);
 	}
@@ -415,6 +460,70 @@ void SLandscapeHeightmapTrackerPanel::OnViewportClick(const FLandscapeHeightmapT
 		bHasMarker = false;
 		UpdateStatus(FText::FromString(LastMapping.FailureReason));
 	}
+}
+
+void SLandscapeHeightmapTrackerPanel::OnHeightmapClicked(FVector2D DisplayUV)
+{
+	if (!AssignedLandscape.IsValid())
+	{
+		UpdateStatus(LOCTEXT("NoLandscapeAssignedHeightmapClick", "No Landscape assigned."));
+		return;
+	}
+
+	if (!HeightmapTexture || ImageSize.X <= 0 || ImageSize.Y <= 0)
+	{
+		UpdateStatus(LOCTEXT("NoHeightmapLoadedClick", "No heightmap loaded."));
+		return;
+	}
+
+	RefreshLandscapeBounds();
+
+	FLandscapeTrackerMappingOptions Options;
+	Options.bFlipX = bFlipX;
+	Options.bFlipY = bFlipY;
+
+	const FLandscapeTrackerReverseMappingResult ReverseMapping = FLandscapeCoordinateMapper::MapUVToLocalPosition(LocalBounds, DisplayUV, Options);
+	if (!ReverseMapping.bIsValid)
+	{
+		UpdateStatus(FText::FromString(ReverseMapping.FailureReason));
+		return;
+	}
+
+	const FTransform& LandscapeTransform = AssignedLandscape->GetActorTransform();
+	const FVector WorldXY = LandscapeTransform.TransformPosition(ReverseMapping.LocalPosition);
+	UWorld* World = AssignedLandscape->GetWorld();
+	const FLandscapeSurfaceTraceResult SurfaceTrace = FLandscapeSurfaceTraceHelper::TraceAssignedLandscapeSurface(World, AssignedLandscape.Get(), WorldXY);
+	if (!SurfaceTrace.bIsValid)
+	{
+		UpdateStatus(FText::FromString(SurfaceTrace.FailureReason));
+		return;
+	}
+
+	LastMapping = FLandscapeTrackerMappingResult();
+	LastMapping.bIsValid = true;
+	LastMapping.bIsInsideBounds = true;
+	LastMapping.WorldPosition = SurfaceTrace.WorldPosition;
+	LastMapping.LocalPosition = ReverseMapping.LocalPosition;
+	LastMapping.NormalizedUV = ReverseMapping.DisplayUV;
+	LastMapping.Pixel = FLandscapeCoordinateMapper::UVToPixel(ReverseMapping.DisplayUV, ImageSize);
+	LastLandscapeUV = ReverseMapping.LandscapeUV;
+	bHasLandscapeUV = true;
+
+	FLandscapeHeightmapTrackerModule::SetReverseMarker(SurfaceTrace.WorldPosition, AssignedLandscape.Get());
+	UpdateStatus(LOCTEXT("MappedHeightmapClick", "Heightmap click mapped to Landscape surface."));
+
+	UE_LOG(
+		LogLandscapeHeightmapTrackerPanel,
+		Verbose,
+		TEXT("Heightmap click mapped. DisplayUV=(%f,%f) LandscapeUV=(%f,%f) Local=%s WorldXY=%s Surface=%s HitCount=%d"),
+		ReverseMapping.DisplayUV.X,
+		ReverseMapping.DisplayUV.Y,
+		ReverseMapping.LandscapeUV.X,
+		ReverseMapping.LandscapeUV.Y,
+		*ReverseMapping.LocalPosition.ToCompactString(),
+		*WorldXY.ToCompactString(),
+		*SurfaceTrace.WorldPosition.ToCompactString(),
+		SurfaceTrace.HitCount);
 }
 
 void SLandscapeHeightmapTrackerPanel::SetTrackingEnabled(ECheckBoxState NewState)
@@ -449,6 +558,8 @@ void SLandscapeHeightmapTrackerPanel::AssignLandscape(ALandscapeProxy* InLandsca
 {
 	AssignedLandscape = InLandscape;
 	bHasMarker = false;
+	bHasLandscapeUV = false;
+	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
 	RefreshLandscapeBounds();
 	if (AssignedLandscape.IsValid())
 	{
@@ -552,17 +663,7 @@ bool SLandscapeHeightmapTrackerPanel::IsAssignedLandscapeHit(AActor* HitActor, U
 		return false;
 	}
 
-	if (HitActor == AssignedLandscape.Get())
-	{
-		return true;
-	}
-
-	if (HitComponent && HitComponent->GetOwner() == AssignedLandscape.Get())
-	{
-		return true;
-	}
-
-	return false;
+	return FLandscapeSurfaceTraceHelper::HitBelongsToAssignedLandscape(AssignedLandscape.Get(), HitActor, HitComponent);
 }
 
 void SLandscapeHeightmapTrackerPanel::UpdateStatus(const FText& InStatus)
@@ -583,7 +684,25 @@ FText SLandscapeHeightmapTrackerPanel::GetImagePathText() const { return ImagePa
 FText SLandscapeHeightmapTrackerPanel::GetImageInfoText() const { return ImageSize.X > 0 ? FText::Format(LOCTEXT("ImageInfoFormat", "{0} x {1} {2}"), FText::AsNumber(ImageSize.X), FText::AsNumber(ImageSize.Y), FText::FromString(ImageFormat)) : LOCTEXT("NoImageInfo", "No image."); }
 FText SLandscapeHeightmapTrackerPanel::GetWorldText() const { return LastMapping.bIsValid ? FText::FromString(LastMapping.WorldPosition.ToCompactString()) : FText::GetEmpty(); }
 FText SLandscapeHeightmapTrackerPanel::GetLocalText() const { return LastMapping.bIsValid ? FText::FromString(LastMapping.LocalPosition.ToCompactString()) : FText::GetEmpty(); }
-FText SLandscapeHeightmapTrackerPanel::GetUvText() const { return LastMapping.bIsValid ? FText::Format(LOCTEXT("UvFormat", "U={0} V={1}"), FText::AsNumber(LastMapping.NormalizedUV.X), FText::AsNumber(LastMapping.NormalizedUV.Y)) : FText::GetEmpty(); }
+FText SLandscapeHeightmapTrackerPanel::GetUvText() const
+{
+	if (!LastMapping.bIsValid)
+	{
+		return FText::GetEmpty();
+	}
+
+	if (bHasLandscapeUV)
+	{
+		return FText::Format(
+			LOCTEXT("ReverseUvFormat", "Display U={0} V={1}; Landscape U={2} V={3}"),
+			FText::AsNumber(LastMapping.NormalizedUV.X),
+			FText::AsNumber(LastMapping.NormalizedUV.Y),
+			FText::AsNumber(LastLandscapeUV.X),
+			FText::AsNumber(LastLandscapeUV.Y));
+	}
+
+	return FText::Format(LOCTEXT("UvFormat", "U={0} V={1}"), FText::AsNumber(LastMapping.NormalizedUV.X), FText::AsNumber(LastMapping.NormalizedUV.Y));
+}
 FText SLandscapeHeightmapTrackerPanel::GetPixelText() const { return LastMapping.bIsValid ? FText::Format(LOCTEXT("PixelFormat", "X={0} Y={1}"), FText::AsNumber(LastMapping.Pixel.X), FText::AsNumber(LastMapping.Pixel.Y)) : FText::GetEmpty(); }
 FText SLandscapeHeightmapTrackerPanel::GetStatusText() const { return StatusText; }
 

@@ -81,6 +81,56 @@ FLandscapeTrackerMappingResult FLandscapeCoordinateMapper::MapLocalPosition(
 	return Result;
 }
 
+FLandscapeTrackerReverseMappingResult FLandscapeCoordinateMapper::MapUVToLocalPosition(
+	const FLandscapeTrackerBounds& LocalBounds,
+	const FVector2D& DisplayUV,
+	const FLandscapeTrackerMappingOptions& Options)
+{
+	FLandscapeTrackerReverseMappingResult Result;
+	Result.DisplayUV = DisplayUV;
+
+	if (!LocalBounds.IsValid())
+	{
+		Result.FailureReason = TEXT("Invalid Landscape bounds.");
+		return Result;
+	}
+
+	const bool bInside =
+		DisplayUV.X >= -Options.BoundsTolerance &&
+		DisplayUV.X <= 1.0 + Options.BoundsTolerance &&
+		DisplayUV.Y >= -Options.BoundsTolerance &&
+		DisplayUV.Y <= 1.0 + Options.BoundsTolerance;
+
+	if (!bInside && !Options.bClampToBounds)
+	{
+		Result.FailureReason = TEXT("Point is outside heightmap UV bounds.");
+		return Result;
+	}
+
+	double U = FMath::Clamp(static_cast<double>(DisplayUV.X), 0.0, 1.0);
+	double V = FMath::Clamp(static_cast<double>(DisplayUV.Y), 0.0, 1.0);
+
+	if (Options.bFlipX)
+	{
+		U = 1.0 - U;
+	}
+
+	if (Options.bFlipY)
+	{
+		V = 1.0 - V;
+	}
+
+	const double Width = LocalBounds.Max.X - LocalBounds.Min.X;
+	const double Height = LocalBounds.Max.Y - LocalBounds.Min.Y;
+	Result.LandscapeUV = FVector2D(U, V);
+	Result.LocalPosition = FVector(
+		LocalBounds.Min.X + U * Width,
+		LocalBounds.Min.Y + V * Height,
+		0.0);
+	Result.bIsValid = true;
+	return Result;
+}
+
 FIntPoint FLandscapeCoordinateMapper::UVToPixel(const FVector2D& UV, const FIntPoint& ImageSize)
 {
 	return FIntPoint(
