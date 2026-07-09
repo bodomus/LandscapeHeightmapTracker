@@ -8,7 +8,11 @@
 
 The plugin uses a scoped `FEdMode` implementation: `FLandscapeHeightmapTrackerEdMode`.
 
-The Slate panel enables the mode when `Track Landscape Clicks` is checked and disables it when unchecked or when the panel is destroyed. The module also disables the mode during shutdown. The editor mode handles left mouse button press, creates a ray from the active editor viewport cursor location, runs a visibility line trace in the editor world, and broadcasts the hit result through a module multicast delegate.
+The Slate panel enables the mode when `Track Landscape Clicks` is checked and disables it when unchecked or when the panel is destroyed. The module also disables the mode during shutdown. The editor mode handles left mouse button press, creates a projection-aware trace segment from the active editor viewport cursor location, runs a visibility line trace in the editor world, and broadcasts the hit result through a module multicast delegate.
+
+Perspective viewports trace forward from the cursor origin along the cursor direction. Orthographic viewports trace a finite segment centered on the cursor origin and spanning both directions along the normalized cursor direction, matching the parallel-ray nature of Top, Bottom, Front, Back, Left, and Right editor views. This keeps projection handling in the viewport integration layer and avoids projection-specific corrections in coordinate mapping.
+
+Trace construction lives in `FViewportTraceRayBuilder` so the perspective and orthographic segment rules can be automation-tested without depending on editor-world collision.
 
 The mode returns `false` from `InputKey` after observing the click so normal editor selection/navigation behavior can continue wherever Unreal permits it.
 

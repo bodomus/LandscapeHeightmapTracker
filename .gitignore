@@ -5,6 +5,10 @@ DerivedDataCache/
 Intermediate/
 Saved/
 
+
+#Graphify
+graphify-out/
+
 # Unreal local user files
 *.opensdf
 *.sdf

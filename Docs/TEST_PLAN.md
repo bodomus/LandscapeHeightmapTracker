@@ -6,9 +6,17 @@ Run editor automation tests matching:
 
 ```text
 LandscapeHeightmapTracker.Mapper.*
+LandscapeHeightmapTracker.ViewportTrace.*
 ```
 
-These tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
+The mapper tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
+
+The viewport trace tests cover:
+
+- Perspective forward trace construction.
+- Orthographic segment construction centered on the cursor origin.
+- Reversed orthographic direction.
+- Invalid zero-length direction rejection.
 
 ## Scenario 1 - Basic 1009 landscape
 
@@ -71,3 +79,24 @@ Verify Flip X and Flip Y visually.
 3. Verify plugin handles invalid references safely.
 4. No crash.
 5. UI indicates that Landscape must be reassigned.
+
+## Scenario 9 - Orthographic Top View
+
+1. Assign the same Landscape and source heightmap used for Perspective validation.
+2. Enable `Track Landscape Clicks`.
+3. Switch the editor viewport to `Top`.
+4. Click the center, four corner regions, a distinctive peak, and a distinctive valley.
+5. Verify marker positions match the same locations on the 2D heightmap.
+6. Switch back to Perspective and verify no regression.
+
+## Scenario 10 - Other Orthographic Views
+
+Where terrain visibility makes the result meaningful, repeat click validation from:
+
+- Bottom.
+- Front.
+- Back.
+- Left.
+- Right.
+
+The trace should be geometrically valid for each view, but side views can be visually ambiguous on steep or occluded terrain.

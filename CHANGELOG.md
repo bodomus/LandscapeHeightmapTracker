@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fixed orthographic editor viewport click traces by using projection-aware trace segment construction.
+- Added viewport trace automation tests for Perspective, Orthographic, reversed direction, and invalid direction cases.
+- Documented orthographic viewport validation scenarios.
+
 ## 0.1.0
 
 - Added initial Unreal Engine 5.7 Editor-only plugin structure.
