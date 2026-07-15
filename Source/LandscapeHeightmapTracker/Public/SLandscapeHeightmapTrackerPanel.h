@@ -66,6 +66,7 @@ private:
 	FText StatusText;
 	bool bHasMarker = false;
 	bool bHasHoverMarker = false;
+	bool bHoverTrackingHasViewportState = false;
 	bool bHasLandscapeUV = false;
 	bool bTrackClicks = false;
 	bool bFlipX = false;
