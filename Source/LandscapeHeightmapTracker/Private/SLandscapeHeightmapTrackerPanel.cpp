@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HeightmapImageClickMapper.h"
+#include "HeightmapImageInfoAnalyzer.h"
 #include "IDesktopPlatform.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
@@ -245,6 +246,43 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
 			[
 				MakeLabelValue(LOCTEXT("ImageInfo", "Image:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetImageInfoText))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 8.0f)
+			[
+				SNew(SBorder)
+				.BorderImage(FAppStyle::GetBrush("Brushes.Panel"))
+				.Padding(8.0f)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+					[
+						SNew(STextBlock).Text(LOCTEXT("HeightmapInformationHeader", "Heightmap Information")).Font(FAppStyle::GetFontStyle("SmallFontBold"))
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						MakeLabelValue(LOCTEXT("HeightmapColorModel", "Color model:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetImageColorModelText))
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						MakeLabelValue(LOCTEXT("HeightmapBitDepth", "Bit depth:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetImageBitDepthText))
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						MakeLabelValue(LOCTEXT("HeightmapPossibleLevels", "Possible grayscale levels:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetPossibleGrayscaleLevelsText))
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						MakeLabelValue(LOCTEXT("HeightmapUniqueLevels", "Unique grayscale levels:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetUniqueGrayscaleLevelsText))
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						MakeLabelValue(LOCTEXT("HeightmapValueRange", "Value range:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetGrayscaleRangeText))
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						MakeLabelValue(LOCTEXT("HeightmapCompatibility", "UE Landscape:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetHeightmapCompatibilityText))
+					]
+				]
 			]
 			+ SVerticalBox::Slot().FillHeight(1.0f).MinHeight(320.0f).Padding(8.0f)
 			[
@@ -678,6 +716,13 @@ void SLandscapeHeightmapTrackerPanel::RefreshLandscapeBounds()
 void SLandscapeHeightmapTrackerPanel::ReleaseTexture()
 {
 	HeightmapBrush.SetResourceObject(nullptr);
+	bHasHeightmapImageInfo = false;
+	bSourceImageIsGrayscale = false;
+	ImageBitDepth = 0;
+	PossibleGrayscaleLevelCount = 0;
+	UniqueGrayscaleLevelCount = 0;
+	MinGrayscaleValue = 0;
+	MaxGrayscaleValue = 0;
 	bHasMarker = false;
 	bHoverTrackingHasViewportState = false;
 	ClearHoverMarker();
@@ -713,6 +758,22 @@ bool SLandscapeHeightmapTrackerPanel::LoadPngTexture(const FString& FilePath, FS
 		return false;
 	}
 
+	const int32 SourceBitDepth = ImageWrapper->GetBitDepth();
+	const bool bSourceIsGrayscale = ImageWrapper->GetFormat() == ERGBFormat::Gray;
+	TArray64<uint8> GrayscaleData;
+	if (!ImageWrapper->GetRaw(ERGBFormat::Gray, SourceBitDepth, GrayscaleData))
+	{
+		OutError = TEXT("PNG grayscale samples could not be decoded for analysis.");
+		return false;
+	}
+
+	const FHeightmapGrayscaleInfo GrayscaleInfo = FHeightmapImageInfoAnalyzer::Analyze(GrayscaleData, SourceBitDepth);
+	if (!GrayscaleInfo.bIsValid)
+	{
+		OutError = TEXT("PNG grayscale information could not be analyzed.");
+		return false;
+	}
+
 	TArray64<uint8> RawData;
 	if (!ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, RawData))
 	{
@@ -742,6 +803,13 @@ bool SLandscapeHeightmapTrackerPanel::LoadPngTexture(const FString& FilePath, FS
 
 	ImagePath = FilePath;
 	ImageFormat = TEXT("PNG");
+	bHasHeightmapImageInfo = true;
+	bSourceImageIsGrayscale = bSourceIsGrayscale;
+	ImageBitDepth = GrayscaleInfo.BitDepth;
+	PossibleGrayscaleLevelCount = GrayscaleInfo.PossibleLevelCount;
+	UniqueGrayscaleLevelCount = GrayscaleInfo.UniqueLevelCount;
+	MinGrayscaleValue = GrayscaleInfo.MinValue;
+	MaxGrayscaleValue = GrayscaleInfo.MaxValue;
 	bHasMarker = false;
 	bHoverTrackingHasViewportState = false;
 	ClearHoverMarker();
@@ -819,6 +887,48 @@ FText SLandscapeHeightmapTrackerPanel::GetActorScaleText() const { return Assign
 FText SLandscapeHeightmapTrackerPanel::GetLocalBoundsText() const { return LocalBounds.IsValid() ? FText::Format(LOCTEXT("BoundsFormat", "Min=({0}, {1}) Max=({2}, {3})"), FText::AsNumber(LocalBounds.Min.X), FText::AsNumber(LocalBounds.Min.Y), FText::AsNumber(LocalBounds.Max.X), FText::AsNumber(LocalBounds.Max.Y)) : LOCTEXT("InvalidBounds", "Unavailable"); }
 FText SLandscapeHeightmapTrackerPanel::GetImagePathText() const { return ImagePath.IsEmpty() ? LOCTEXT("NoImage", "No heightmap loaded.") : FText::FromString(ImagePath); }
 FText SLandscapeHeightmapTrackerPanel::GetImageInfoText() const { return ImageSize.X > 0 ? FText::Format(LOCTEXT("ImageInfoFormat", "{0} x {1} {2}"), FText::AsNumber(ImageSize.X), FText::AsNumber(ImageSize.Y), FText::FromString(ImageFormat)) : LOCTEXT("NoImageInfo", "No image."); }
+FText SLandscapeHeightmapTrackerPanel::GetImageColorModelText() const
+{
+	if (!bHasHeightmapImageInfo)
+	{
+		return LOCTEXT("NoHeightmapColorModel", "Unavailable");
+	}
+
+	return bSourceImageIsGrayscale
+		? LOCTEXT("GrayscaleColorModel", "Grayscale (single channel)")
+		: LOCTEXT("ConvertedGrayscaleColorModel", "Color source (values converted to grayscale)");
+}
+FText SLandscapeHeightmapTrackerPanel::GetImageBitDepthText() const
+{
+	return bHasHeightmapImageInfo
+		? FText::Format(LOCTEXT("HeightmapBitDepthFormat", "{0}-bit per channel"), FText::AsNumber(ImageBitDepth))
+		: LOCTEXT("NoHeightmapBitDepth", "Unavailable");
+}
+FText SLandscapeHeightmapTrackerPanel::GetPossibleGrayscaleLevelsText() const
+{
+	return bHasHeightmapImageInfo ? FText::AsNumber(PossibleGrayscaleLevelCount) : LOCTEXT("NoPossibleGrayscaleLevels", "Unavailable");
+}
+FText SLandscapeHeightmapTrackerPanel::GetUniqueGrayscaleLevelsText() const
+{
+	return bHasHeightmapImageInfo ? FText::AsNumber(UniqueGrayscaleLevelCount) : LOCTEXT("NoUniqueGrayscaleLevels", "Unavailable");
+}
+FText SLandscapeHeightmapTrackerPanel::GetGrayscaleRangeText() const
+{
+	return bHasHeightmapImageInfo
+		? FText::Format(LOCTEXT("GrayscaleRangeFormat", "{0} - {1}"), FText::AsNumber(MinGrayscaleValue), FText::AsNumber(MaxGrayscaleValue))
+		: LOCTEXT("NoGrayscaleRange", "Unavailable");
+}
+FText SLandscapeHeightmapTrackerPanel::GetHeightmapCompatibilityText() const
+{
+	if (!bHasHeightmapImageInfo)
+	{
+		return LOCTEXT("NoHeightmapCompatibility", "Unavailable");
+	}
+
+	return bSourceImageIsGrayscale && ImageBitDepth == 16
+		? LOCTEXT("RecommendedHeightmapCompatibility", "Recommended: 16-bit grayscale PNG")
+		: LOCTEXT("NonRecommendedHeightmapCompatibility", "Not recommended: UE Landscape expects 16-bit grayscale PNG");
+}
 FText SLandscapeHeightmapTrackerPanel::GetWorldText() const { return LastMapping.bIsValid ? FText::FromString(LastMapping.WorldPosition.ToCompactString()) : FText::GetEmpty(); }
 FText SLandscapeHeightmapTrackerPanel::GetLocalText() const { return LastMapping.bIsValid ? FText::FromString(LastMapping.LocalPosition.ToCompactString()) : FText::GetEmpty(); }
 FText SLandscapeHeightmapTrackerPanel::GetUvText() const

@@ -48,6 +48,12 @@ private:
 	FText GetLocalBoundsText() const;
 	FText GetImagePathText() const;
 	FText GetImageInfoText() const;
+	FText GetImageColorModelText() const;
+	FText GetImageBitDepthText() const;
+	FText GetPossibleGrayscaleLevelsText() const;
+	FText GetUniqueGrayscaleLevelsText() const;
+	FText GetGrayscaleRangeText() const;
+	FText GetHeightmapCompatibilityText() const;
 	FText GetWorldText() const;
 	FText GetLocalText() const;
 	FText GetUvText() const;
@@ -63,7 +69,14 @@ private:
 	FIntPoint ImageSize = FIntPoint::ZeroValue;
 	FString ImagePath;
 	FString ImageFormat;
+	int32 ImageBitDepth = 0;
+	int32 PossibleGrayscaleLevelCount = 0;
+	int32 UniqueGrayscaleLevelCount = 0;
+	uint16 MinGrayscaleValue = 0;
+	uint16 MaxGrayscaleValue = 0;
 	FText StatusText;
+	bool bHasHeightmapImageInfo = false;
+	bool bSourceImageIsGrayscale = false;
 	bool bHasMarker = false;
 	bool bHasHoverMarker = false;
 	bool bHoverTrackingHasViewportState = false;
