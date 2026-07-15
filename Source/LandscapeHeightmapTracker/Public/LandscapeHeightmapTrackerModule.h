@@ -16,14 +16,25 @@ public:
 		TWeakObjectPtr<UPrimitiveComponent> HitComponent;
 	};
 
+	struct FViewportHoverResult
+	{
+		bool bHasHit = false;
+		FVector WorldPosition = FVector::ZeroVector;
+		TWeakObjectPtr<AActor> HitActor;
+		TWeakObjectPtr<UPrimitiveComponent> HitComponent;
+	};
+
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnViewportClickResult, const FViewportClickResult&);
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnViewportHoverResult, const FViewportHoverResult&);
 
 	static const FName PluginTabName;
 	static const FName EditorModeId;
 
 	static FOnViewportClickResult& OnViewportClickResult();
+	static FOnViewportHoverResult& OnViewportHoverResult();
 	static void SetTrackingModeEnabled(bool bEnabled);
 	static bool IsTrackingModeEnabled();
+	static FString GetPluginVersion();
 	static void SetReverseMarker(const FVector& WorldPosition, AActor* OwnerActor);
 	static void ClearReverseMarker();
 	static bool GetReverseMarker(FVector& OutWorldPosition);

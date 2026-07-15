@@ -44,6 +44,8 @@ public:
 		SLATE_ATTRIBUTE(const FSlateBrush*, ImageBrush)
 		SLATE_ATTRIBUTE(FVector2D, MarkerUV)
 		SLATE_ATTRIBUTE(bool, HasMarker)
+		SLATE_ATTRIBUTE(FVector2D, HoverMarkerUV)
+		SLATE_ATTRIBUTE(bool, HasHoverMarker)
 		SLATE_EVENT(FSimpleDelegate, OnUnavailableClicked)
 		SLATE_EVENT(FSimpleDelegate, OnOutsideImageClicked)
 		SLATE_EVENT(TDelegate<void(FVector2D)>, OnHeightmapClicked)
@@ -54,6 +56,8 @@ public:
 		ImageBrush = InArgs._ImageBrush;
 		MarkerUV = InArgs._MarkerUV;
 		HasMarker = InArgs._HasMarker;
+		HoverMarkerUV = InArgs._HoverMarkerUV;
+		HasHoverMarker = InArgs._HasHoverMarker;
 		OnUnavailableClicked = InArgs._OnUnavailableClicked;
 		OnOutsideImageClicked = InArgs._OnOutsideImageClicked;
 		OnHeightmapClicked = InArgs._OnHeightmapClicked;
@@ -84,9 +88,11 @@ public:
 
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId, ImageGeometry, Brush, ESlateDrawEffect::None, InWidgetStyle.GetColorAndOpacityTint());
 
-		if (HasMarker.Get())
+		const bool bUseHoverMarker = HasHoverMarker.Get();
+		const bool bUseClickMarker = !bUseHoverMarker && HasMarker.Get();
+		if (bUseHoverMarker || bUseClickMarker)
 		{
-			const FVector2D UV = MarkerUV.Get();
+			const FVector2D UV = bUseHoverMarker ? HoverMarkerUV.Get() : MarkerUV.Get();
 			const FVector2D MarkerCenter = ImageRect.DrawOffset + FVector2D(UV.X * ImageRect.DrawSize.X, UV.Y * ImageRect.DrawSize.Y);
 			const float Radius = 8.0f;
 			const FLinearColor Outer = FLinearColor::Black;
@@ -142,6 +148,8 @@ private:
 	TAttribute<const FSlateBrush*> ImageBrush;
 	TAttribute<FVector2D> MarkerUV;
 	TAttribute<bool> HasMarker;
+	TAttribute<FVector2D> HoverMarkerUV;
+	TAttribute<bool> HasHoverMarker;
 	FSimpleDelegate OnUnavailableClicked;
 	FSimpleDelegate OnOutsideImageClicked;
 	TDelegate<void(FVector2D)> OnHeightmapClicked;
@@ -174,6 +182,7 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 	HeightmapBrush.Tiling = ESlateBrushTileType::NoTile;
 
 	ClickDelegateHandle = FLandscapeHeightmapTrackerModule::OnViewportClickResult().AddSP(this, &SLandscapeHeightmapTrackerPanel::OnViewportClick);
+	HoverDelegateHandle = FLandscapeHeightmapTrackerModule::OnViewportHoverResult().AddSP(this, &SLandscapeHeightmapTrackerPanel::OnViewportHover);
 	FLandscapeHeightmapTrackerModule::SetTrackingModeEnabled(bTrackClicks);
 
 	ChildSlot
@@ -184,7 +193,7 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f)
 			[
-				SNew(STextBlock).Text(LOCTEXT("LandscapeHeader", "Landscape")).Font(FAppStyle::GetFontStyle("HeadingMedium"))
+				SNew(STextBlock).Text(FText::Format(LOCTEXT("LandscapeHeader", "Landscape {0}"), FText::FromString(FLandscapeHeightmapTrackerModule::GetPluginVersion()))).Font(FAppStyle::GetFontStyle("HeadingMedium"))
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f)
 			[
@@ -242,10 +251,12 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 				SNew(SBorder)
 				.BorderImage(FAppStyle::GetBrush("Brushes.Panel"))
 				[
-					SNew(SHeightmapTrackerImageView)
+					SAssignNew(HeightmapImageWidget, SHeightmapTrackerImageView)
 					.ImageBrush_Lambda([this]() { return HeightmapTexture ? &HeightmapBrush : nullptr; })
 					.MarkerUV_Lambda([this]() { return MarkerUV; })
 					.HasMarker_Lambda([this]() { return bHasMarker; })
+					.HoverMarkerUV_Lambda([this]() { return HoverMarkerUV; })
+					.HasHoverMarker_Lambda([this]() { return bHasHoverMarker; })
 					.OnUnavailableClicked(FSimpleDelegate::CreateLambda([this]() { UpdateStatus(LOCTEXT("NoHeightmapLoadedClick", "No heightmap loaded.")); }))
 					.OnOutsideImageClicked(FSimpleDelegate::CreateLambda([this]() { UpdateStatus(LOCTEXT("OutsideImageClick", "Click is outside the heightmap image area.")); }))
 					.OnHeightmapClicked(TDelegate<void(FVector2D)>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::OnHeightmapClicked))
@@ -331,6 +342,8 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 SLandscapeHeightmapTrackerPanel::~SLandscapeHeightmapTrackerPanel()
 {
 	FLandscapeHeightmapTrackerModule::OnViewportClickResult().Remove(ClickDelegateHandle);
+	FLandscapeHeightmapTrackerModule::OnViewportHoverResult().Remove(HoverDelegateHandle);
+	ClearHoverMarker();
 	FLandscapeHeightmapTrackerModule::SetTrackingModeEnabled(false);
 	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
 	ReleaseTexture();
@@ -409,9 +422,11 @@ FReply SLandscapeHeightmapTrackerPanel::ClearMarker()
 {
 	bHasMarker = false;
 	bHasLandscapeUV = false;
+	ClearHoverMarker();
 	LastMapping = FLandscapeTrackerMappingResult();
 	LastLandscapeUV = FVector2D::ZeroVector;
 	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
+	InvalidateHeightmapMarkerPaint();
 	UpdateStatus(LOCTEXT("MarkerCleared", "All markers cleared."));
 	return FReply::Handled();
 }
@@ -431,6 +446,10 @@ void SLandscapeHeightmapTrackerPanel::OnViewportClick(const FLandscapeHeightmapT
 	if (!AssignedLandscape.IsValid())
 	{
 		bHasMarker = false;
+		if (!bHasHoverMarker)
+		{
+			InvalidateHeightmapMarkerPaint();
+		}
 		UpdateStatus(LOCTEXT("NoLandscapeAssignedClick", "No Landscape assigned."));
 		return;
 	}
@@ -452,14 +471,57 @@ void SLandscapeHeightmapTrackerPanel::OnViewportClick(const FLandscapeHeightmapT
 		bHasMarker = true;
 		bHasLandscapeUV = false;
 		MarkerUV = LastMapping.NormalizedUV;
+		if (!bHasHoverMarker)
+		{
+			InvalidateHeightmapMarkerPaint();
+		}
 		UpdateStatus(LOCTEXT("MappedClick", "Landscape click mapped to heightmap."));
 		UE_LOG(LogLandscapeHeightmapTrackerPanel, Log, TEXT("Valid click mapped to U=%f V=%f Pixel=(%d,%d)."), LastMapping.NormalizedUV.X, LastMapping.NormalizedUV.Y, LastMapping.Pixel.X, LastMapping.Pixel.Y);
 	}
 	else
 	{
 		bHasMarker = false;
+		if (!bHasHoverMarker)
+		{
+			InvalidateHeightmapMarkerPaint();
+		}
 		UpdateStatus(FText::FromString(LastMapping.FailureReason));
 	}
+}
+
+void SLandscapeHeightmapTrackerPanel::OnViewportHover(const FLandscapeHeightmapTrackerModule::FViewportHoverResult& Hover)
+{
+	if (!bTrackClicks || !AssignedLandscape.IsValid() || !Hover.bHasHit)
+	{
+		ClearHoverMarker();
+		return;
+	}
+
+	if (!IsAssignedLandscapeHit(Hover.HitActor.Get(), Hover.HitComponent.Get()))
+	{
+		ClearHoverMarker();
+		return;
+	}
+
+	RefreshLandscapeBounds();
+
+	FLandscapeTrackerMappingOptions Options;
+	Options.bFlipX = bFlipX;
+	Options.bFlipY = bFlipY;
+
+	const FLandscapeTrackerMappingResult HoverMapping = FLandscapeCoordinateMapper::MapWorldPosition(
+		AssignedLandscape->GetActorTransform(),
+		LocalBounds,
+		Hover.WorldPosition,
+		ImageSize,
+		Options);
+	if (!HoverMapping.bIsValid)
+	{
+		ClearHoverMarker();
+		return;
+	}
+
+	SetHoverMarkerUV(HoverMapping.NormalizedUV);
 }
 
 void SLandscapeHeightmapTrackerPanel::OnHeightmapClicked(FVector2D DisplayUV)
@@ -529,6 +591,10 @@ void SLandscapeHeightmapTrackerPanel::OnHeightmapClicked(FVector2D DisplayUV)
 void SLandscapeHeightmapTrackerPanel::SetTrackingEnabled(ECheckBoxState NewState)
 {
 	bTrackClicks = NewState == ECheckBoxState::Checked;
+	if (!bTrackClicks)
+	{
+		ClearHoverMarker();
+	}
 	FLandscapeHeightmapTrackerModule::SetTrackingModeEnabled(bTrackClicks);
 
 	ULandscapeTrackerSettings* Settings = GetMutableDefault<ULandscapeTrackerSettings>();
@@ -559,8 +625,10 @@ void SLandscapeHeightmapTrackerPanel::AssignLandscape(ALandscapeProxy* InLandsca
 	AssignedLandscape = InLandscape;
 	bHasMarker = false;
 	bHasLandscapeUV = false;
+	ClearHoverMarker();
 	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
 	RefreshLandscapeBounds();
+	InvalidateHeightmapMarkerPaint();
 	if (AssignedLandscape.IsValid())
 	{
 		UpdateStatus(FText::Format(LOCTEXT("AssignedLandscape", "Assigned Landscape: {0}"), FText::FromString(AssignedLandscape->GetName())));
@@ -584,6 +652,9 @@ void SLandscapeHeightmapTrackerPanel::RefreshLandscapeBounds()
 void SLandscapeHeightmapTrackerPanel::ReleaseTexture()
 {
 	HeightmapBrush.SetResourceObject(nullptr);
+	bHasMarker = false;
+	ClearHoverMarker();
+	InvalidateHeightmapMarkerPaint();
 	if (HeightmapTexture)
 	{
 		HeightmapTexture->RemoveFromRoot();
@@ -645,6 +716,8 @@ bool SLandscapeHeightmapTrackerPanel::LoadPngTexture(const FString& FilePath, FS
 	ImagePath = FilePath;
 	ImageFormat = TEXT("PNG");
 	bHasMarker = false;
+	ClearHoverMarker();
+	InvalidateHeightmapMarkerPaint();
 
 	ULandscapeTrackerSettings* Settings = GetMutableDefault<ULandscapeTrackerSettings>();
 	Settings->LastHeightmapPath = FilePath;
@@ -664,6 +737,42 @@ bool SLandscapeHeightmapTrackerPanel::IsAssignedLandscapeHit(AActor* HitActor, U
 	}
 
 	return FLandscapeSurfaceTraceHelper::HitBelongsToAssignedLandscape(AssignedLandscape.Get(), HitActor, HitComponent);
+}
+
+void SLandscapeHeightmapTrackerPanel::ClearHoverMarker()
+{
+	if (!bHasHoverMarker)
+	{
+		return;
+	}
+
+	bHasHoverMarker = false;
+	HoverMarkerUV = FVector2D::ZeroVector;
+	InvalidateHeightmapMarkerPaint();
+}
+
+bool SLandscapeHeightmapTrackerPanel::SetHoverMarkerUV(const FVector2D& NewUV)
+{
+	if (bHasHoverMarker && HoverMarkerUV.Equals(NewUV, KINDA_SMALL_NUMBER))
+	{
+		return false;
+	}
+
+	bHasHoverMarker = true;
+	HoverMarkerUV = NewUV;
+	InvalidateHeightmapMarkerPaint();
+	return true;
+}
+
+void SLandscapeHeightmapTrackerPanel::InvalidateHeightmapMarkerPaint()
+{
+	if (HeightmapImageWidget.IsValid())
+	{
+		HeightmapImageWidget->Invalidate(EInvalidateWidgetReason::Paint);
+		return;
+	}
+
+	Invalidate(EInvalidateWidgetReason::Paint);
 }
 
 void SLandscapeHeightmapTrackerPanel::UpdateStatus(const FText& InStatus)

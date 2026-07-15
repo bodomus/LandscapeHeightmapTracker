@@ -23,6 +23,7 @@ private:
 	FReply ClearMarker();
 	void OnObjectSelected(const FAssetData& AssetData);
 	void OnViewportClick(const FLandscapeHeightmapTrackerModule::FViewportClickResult& Click);
+	void OnViewportHover(const FLandscapeHeightmapTrackerModule::FViewportHoverResult& Hover);
 	void OnHeightmapClicked(FVector2D DisplayUV);
 	void SetTrackingEnabled(ECheckBoxState NewState);
 	void SetFlipX(ECheckBoxState NewState);
@@ -32,6 +33,9 @@ private:
 	void ReleaseTexture();
 	bool LoadPngTexture(const FString& FilePath, FString& OutError);
 	bool IsAssignedLandscapeHit(AActor* HitActor, UPrimitiveComponent* HitComponent) const;
+	void ClearHoverMarker();
+	bool SetHoverMarkerUV(const FVector2D& NewUV);
+	void InvalidateHeightmapMarkerPaint();
 	void UpdateStatus(const FText& InStatus);
 
 	ECheckBoxState IsTrackingChecked() const;
@@ -54,12 +58,14 @@ private:
 	FLandscapeTrackerBounds LocalBounds;
 	FLandscapeTrackerMappingResult LastMapping;
 	FVector2D MarkerUV = FVector2D::ZeroVector;
+	FVector2D HoverMarkerUV = FVector2D::ZeroVector;
 	FVector2D LastLandscapeUV = FVector2D::ZeroVector;
 	FIntPoint ImageSize = FIntPoint::ZeroValue;
 	FString ImagePath;
 	FString ImageFormat;
 	FText StatusText;
 	bool bHasMarker = false;
+	bool bHasHoverMarker = false;
 	bool bHasLandscapeUV = false;
 	bool bTrackClicks = false;
 	bool bFlipX = false;
@@ -67,5 +73,7 @@ private:
 
 	UTexture2D* HeightmapTexture = nullptr;
 	FSlateBrush HeightmapBrush;
+	TSharedPtr<SWidget> HeightmapImageWidget;
 	FDelegateHandle ClickDelegateHandle;
+	FDelegateHandle HoverDelegateHandle;
 };

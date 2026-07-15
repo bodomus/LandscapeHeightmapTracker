@@ -2,11 +2,15 @@
 
 #include "EditorModeManager.h"
 #include "EditorModeRegistry.h"
+#include "Dom/JsonObject.h"
+#include "Interfaces/IPluginManager.h"
 #include "LandscapeHeightmapTrackerCommands.h"
 #include "LandscapeHeightmapTrackerEdMode.h"
 #include "LandscapeHeightmapTrackerStyle.h"
 #include "LevelEditor.h"
 #include "SLandscapeHeightmapTrackerPanel.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "ToolMenus.h"
 #include "Widgets/Docking/SDockTab.h"
 
@@ -18,11 +22,41 @@ const FName FLandscapeHeightmapTrackerModule::PluginTabName(TEXT("LandscapeHeigh
 const FName FLandscapeHeightmapTrackerModule::EditorModeId(TEXT("EM_LandscapeHeightmapTracker"));
 
 static FLandscapeHeightmapTrackerModule::FOnViewportClickResult GOnViewportClickResult;
+static FLandscapeHeightmapTrackerModule::FOnViewportHoverResult GOnViewportHoverResult;
 static bool GIsTrackingModeEnabled = false;
 static bool GHasReverseMarker = false;
 static bool GReverseMarkerNeedsCleanup = false;
 static FVector GReverseMarkerWorldPosition = FVector::ZeroVector;
 static TWeakObjectPtr<AActor> GReverseMarkerOwner;
+
+namespace
+{
+	FString ReadPluginVersion()
+	{
+		const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("LandscapeHeightmapTracker"));
+		if (!Plugin.IsValid())
+		{
+			return TEXT("Unknown");
+		}
+
+		FString VersionJsonContents;
+		const FString VersionJsonPath = FPaths::Combine(Plugin->GetBaseDir(), TEXT("version.json"));
+		if (!FFileHelper::LoadFileToString(VersionJsonContents, *VersionJsonPath))
+		{
+			return TEXT("Unknown");
+		}
+
+		TSharedPtr<FJsonObject> VersionJson;
+		const TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(VersionJsonContents);
+		if (!FJsonSerializer::Deserialize(JsonReader, VersionJson) || !VersionJson.IsValid())
+		{
+			return TEXT("Unknown");
+		}
+
+		FString Version;
+		return VersionJson->TryGetStringField(TEXT("version"), Version) ? Version : TEXT("Unknown");
+	}
+}
 
 namespace
 {
@@ -62,6 +96,11 @@ FLandscapeHeightmapTrackerModule::FOnViewportClickResult& FLandscapeHeightmapTra
 	return GOnViewportClickResult;
 }
 
+FLandscapeHeightmapTrackerModule::FOnViewportHoverResult& FLandscapeHeightmapTrackerModule::OnViewportHoverResult()
+{
+	return GOnViewportHoverResult;
+}
+
 void FLandscapeHeightmapTrackerModule::SetTrackingModeEnabled(bool bEnabled)
 {
 	GIsTrackingModeEnabled = bEnabled;
@@ -71,6 +110,11 @@ void FLandscapeHeightmapTrackerModule::SetTrackingModeEnabled(bool bEnabled)
 bool FLandscapeHeightmapTrackerModule::IsTrackingModeEnabled()
 {
 	return GIsTrackingModeEnabled;
+}
+
+FString FLandscapeHeightmapTrackerModule::GetPluginVersion()
+{
+	return ReadPluginVersion();
 }
 
 void FLandscapeHeightmapTrackerModule::SetReverseMarker(const FVector& WorldPosition, AActor* OwnerActor)
@@ -144,7 +188,7 @@ void FLandscapeHeightmapTrackerModule::StartupModule()
 	UToolMenus::RegisterStartupCallback(FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FLandscapeHeightmapTrackerModule::RegisterMenus));
 
 	FGlobalTabmanager::Get()->RegisterNomadTabSpawner(PluginTabName, FOnSpawnTab::CreateRaw(this, &FLandscapeHeightmapTrackerModule::OnSpawnPluginTab))
-		.SetDisplayName(LOCTEXT("LandscapeHeightmapTrackerTabTitle", "Landscape Heightmap Tracker"))
+		.SetDisplayName(FText::Format(LOCTEXT("LandscapeHeightmapTrackerTabTitle", "Landscape Heightmap Tracker {0}"), FText::FromString(GetPluginVersion())))
 		.SetMenuType(ETabSpawnerMenuType::Hidden);
 }
 
@@ -155,6 +199,7 @@ void FLandscapeHeightmapTrackerModule::ShutdownModule()
 	SetTrackingModeEnabled(false);
 	ClearReverseMarker();
 	GOnViewportClickResult.Clear();
+	GOnViewportHoverResult.Clear();
 
 	UToolMenus::UnRegisterStartupCallback(this);
 	UToolMenus::UnregisterOwner(this);

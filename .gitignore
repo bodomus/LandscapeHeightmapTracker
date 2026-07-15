@@ -62,3 +62,13 @@ out/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Added by code-review-graph
+.code-review-graph/
+graphify-out/
+
+# Unreal generated output
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/

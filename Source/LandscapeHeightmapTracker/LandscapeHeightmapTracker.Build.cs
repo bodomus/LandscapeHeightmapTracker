@@ -25,6 +25,7 @@ public class LandscapeHeightmapTracker : ModuleRules
 				"DesktopPlatform",
 				"ImageWrapper",
 				"InputCore",
+				"Json",
 				"LevelEditor",
 				"PropertyEditor",
 				"Projects",
