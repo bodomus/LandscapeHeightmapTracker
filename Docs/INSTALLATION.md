@@ -19,3 +19,16 @@
 7. Open `Tools -> Landscape Heightmap Tracker`.
 
 For plugin-only validation, you can also place this repository under a test project's `Plugins` folder and build that project's Editor target.
+
+## Automatic ZIP package
+
+Every successful Win64 build creates an installable archive at:
+
+```text
+<PluginDir>/build/LandscapeHeightmapTracker-Win64-<Configuration>.zip
+```
+
+This is an UnrealBuildTool post-build step, so it behaves the same when the build
+is started from Rider, Visual Studio, another editor, or `Build.bat`. Extract the
+archive into another Unreal project's `Plugins` directory; the archive already
+contains the top-level `LandscapeHeightmapTracker` folder.
