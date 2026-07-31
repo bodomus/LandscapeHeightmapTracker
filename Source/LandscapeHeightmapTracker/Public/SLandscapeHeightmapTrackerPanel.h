@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "HeightZoneTypes.h"
 #include "LandscapeCoordinateMapper.h"
 #include "LandscapeHeightmapTrackerModule.h"
 #include "Widgets/SCompoundWidget.h"
@@ -21,6 +22,8 @@ private:
 	FReply UseSelectedLandscape();
 	FReply LoadHeightmap();
 	FReply ClearMarker();
+	FReply ApplyHeightZone();
+	FReply ClearHeightZone();
 	void OnObjectSelected(const FAssetData& AssetData);
 	void OnViewportClick(const FLandscapeHeightmapTrackerModule::FViewportClickResult& Click);
 	void OnViewportHover(const FLandscapeHeightmapTrackerModule::FViewportHoverResult& Hover);
@@ -31,7 +34,12 @@ private:
 	void AssignLandscape(ALandscapeProxy* InLandscape);
 	void RefreshLandscapeBounds();
 	void ReleaseTexture();
+	void ReleaseHeightZoneTexture();
 	bool LoadPngTexture(const FString& FilePath, FString& OutError);
+	bool EnsureHeightMetersCache(FString& OutError);
+	bool UpdateHeightZoneTexture(FString& OutError);
+	void InvalidateHeightMetersCache();
+	void ClearHeightZoneVisualization();
 	bool IsAssignedLandscapeHit(AActor* HitActor, UPrimitiveComponent* HitComponent) const;
 	void ClearHoverMarker();
 	bool SetHoverMarkerUV(const FVector2D& NewUV);
@@ -59,6 +67,7 @@ private:
 	FText GetUvText() const;
 	FText GetPixelText() const;
 	FText GetStatusText() const;
+	FText GetHeightZoneModeText() const;
 
 	TWeakObjectPtr<ALandscapeProxy> AssignedLandscape;
 	FLandscapeTrackerBounds LocalBounds;
@@ -74,6 +83,20 @@ private:
 	int32 UniqueGrayscaleLevelCount = 0;
 	uint16 MinGrayscaleValue = 0;
 	uint16 MaxGrayscaleValue = 0;
+	TArray64<uint8> HeightmapGrayscaleData;
+	TArray<float> HeightMetersCache;
+	float MinHeightMeters = 0.0f;
+	float MaxHeightMeters = 0.0f;
+	FTransform CachedLandscapeTransform;
+	FLandscapeTrackerBounds CachedHeightBounds;
+	FIntPoint CachedHeightImageSize = FIntPoint::ZeroValue;
+	int32 CachedHeightBitDepth = 0;
+	bool bCachedFlipX = false;
+	bool bCachedFlipY = true;
+	FHeightZoneSettings HeightZoneSettings;
+	FHeightZoneResult HeightZoneResult;
+	TArray<TSharedPtr<EHeightZoneMode>> HeightZoneModeOptions;
+	TSharedPtr<EHeightZoneMode> SelectedHeightZoneMode;
 	FText StatusText;
 	bool bHasHeightmapImageInfo = false;
 	bool bSourceImageIsGrayscale = false;
@@ -84,9 +107,12 @@ private:
 	bool bTrackClicks = false;
 	bool bFlipX = false;
 	bool bFlipY = true;
+	bool bHeightMetersCacheValid = false;
 
 	UTexture2D* HeightmapTexture = nullptr;
+	UTexture2D* HeightZoneTexture = nullptr;
 	FSlateBrush HeightmapBrush;
+	FSlateBrush HeightZoneBrush;
 	TSharedPtr<SWidget> HeightmapImageWidget;
 	FDelegateHandle ClickDelegateHandle;
 	FDelegateHandle HoverDelegateHandle;
