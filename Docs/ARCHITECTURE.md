@@ -74,6 +74,37 @@ The PNG file is decoded with Unreal's `ImageWrapper` module and copied into a tr
 
 The custom Slate image widget preserves aspect ratio and computes a centered fitted draw rectangle through `FHeightmapImageClickMapper`. Marker placement and click hit testing use that same rectangle, so markers remain aligned when the panel is resized and clicks in letterbox or pillarbox space are rejected.
 
+## Height Zones
+
+The height-zone feature is split into three responsibilities:
+
+- `FHeightmapWorldHeightCache` preserves the decoded source samples and converts
+  them to world-space meters when the heightmap or assigned Landscape changes.
+- `FHeightZoneGenerator` creates a threshold mask and interpolated Marching Squares
+  contours without any Slate dependency.
+- `SHeightmapTrackerImageView` only paints the prepared overlay texture and
+  normalized contour points.
+
+Height conversion uses Unreal's canonical Landscape decoding:
+
+```text
+8-bit sample -> sample * 257
+16-bit sample -> uint16 sample
+LocalZ = LandscapeDataAccess::GetLocalHeight(sample16)
+Display UV -> existing FLandscapeCoordinateMapper -> Landscape Local XY
+WorldZ = LandscapeTransform.TransformPosition(LocalXY, LocalZ).Z
+HeightMeters = WorldZ / 100
+```
+
+The cache signature includes image dimensions/bit depth, Landscape bounds and
+transform, and display flip options. `Apply` reuses a matching cache and performs
+Marching Squares outside `OnPaint`.
+
+Above/Below fill is a single transient BGRA texture. Contours are joined from
+interpolated segments into closed loops or open boundary polylines and stored in
+normalized image space. Slate paints the base map, fill, contours, then the
+existing hover/click marker layers.
+
 ## Reverse Mapping and Surface Z
 
 The 2D-to-3D path is:

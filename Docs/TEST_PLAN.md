@@ -8,6 +8,7 @@ Run editor automation tests matching:
 LandscapeHeightmapTracker.Mapper.*
 LandscapeHeightmapTracker.ViewportTrace.*
 LandscapeHeightmapTracker.ReverseMapping.*
+LandscapeHeightmapTracker.HeightZone.*
 ```
 
 The mapper tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
@@ -20,6 +21,30 @@ The viewport trace tests cover:
 - Orthographic segment construction centered on the cursor origin.
 - Reversed orthographic direction.
 - Invalid zero-length direction rejection.
+
+The height-zone tests cover:
+
+- flat maps above and below the threshold;
+- a single hill and depression;
+- independent islands and an internal hole;
+- a contour crossing the image boundary;
+- deterministic saddle handling;
+- a threshold exactly on a sample and negative heights;
+- finite normalized contour coordinates;
+- 8-bit expansion, canonical UE Landscape height decoding, actor Z scale and
+  translation, and cache construction.
+
+## Scenario 21 - Height Zone
+
+1. Assign a Landscape and load the same source heightmap used to create it.
+2. Enter a height within the displayed Landscape range.
+3. Apply `Above`, then `Below`, then `Contour Only`.
+4. Verify all islands and holes, fitted-image alignment after panel resize, and
+   that hover/click markers remain above the zone.
+5. Change Flip X and Flip Y and apply again.
+6. Move or Z-scale the Landscape and apply again; verify the displayed range and
+   zone update.
+7. Click `Clear`; verify only the zone disappears and the entered height remains.
 
 ## Scenario 1 - Basic 1009 landscape
 

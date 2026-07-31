@@ -8,6 +8,8 @@
 #include "Framework/Application/SlateApplication.h"
 #include "HeightmapImageClickMapper.h"
 #include "HeightmapImageInfoAnalyzer.h"
+#include "HeightmapWorldHeightCache.h"
+#include "HeightZoneGenerator.h"
 #include "IDesktopPlatform.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
@@ -27,6 +29,8 @@
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
+#include "Widgets/Input/SComboBox.h"
+#include "Widgets/Input/SNumericEntryBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
@@ -47,6 +51,10 @@ public:
 		SLATE_ATTRIBUTE(bool, HasMarker)
 		SLATE_ATTRIBUTE(FVector2D, HoverMarkerUV)
 		SLATE_ATTRIBUTE(bool, HasHoverMarker)
+		SLATE_ATTRIBUTE(const FSlateBrush*, HeightZoneBrush)
+		SLATE_ATTRIBUTE(const TArray<FHeightContour>*, HeightContours)
+		SLATE_ATTRIBUTE(bool, HasHeightZone)
+		SLATE_ATTRIBUTE(float, ContourThickness)
 		SLATE_EVENT(FSimpleDelegate, OnUnavailableClicked)
 		SLATE_EVENT(FSimpleDelegate, OnOutsideImageClicked)
 		SLATE_EVENT(TDelegate<void(FVector2D)>, OnHeightmapClicked)
@@ -59,6 +67,10 @@ public:
 		HasMarker = InArgs._HasMarker;
 		HoverMarkerUV = InArgs._HoverMarkerUV;
 		HasHoverMarker = InArgs._HasHoverMarker;
+		HeightZoneBrush = InArgs._HeightZoneBrush;
+		HeightContours = InArgs._HeightContours;
+		HasHeightZone = InArgs._HasHeightZone;
+		ContourThickness = InArgs._ContourThickness;
 		OnUnavailableClicked = InArgs._OnUnavailableClicked;
 		OnOutsideImageClicked = InArgs._OnOutsideImageClicked;
 		OnHeightmapClicked = InArgs._OnHeightmapClicked;
@@ -89,6 +101,61 @@ public:
 
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId, ImageGeometry, Brush, ESlateDrawEffect::None, InWidgetStyle.GetColorAndOpacityTint());
 
+		int32 HighestLayer = LayerId;
+		if (HasHeightZone.Get())
+		{
+			const FSlateBrush* ZoneBrush = HeightZoneBrush.Get();
+			if (ZoneBrush && ZoneBrush->GetResourceObject() != nullptr)
+			{
+				FSlateDrawElement::MakeBox(
+					OutDrawElements,
+					LayerId + 1,
+					ImageGeometry,
+					ZoneBrush,
+					ESlateDrawEffect::None,
+					InWidgetStyle.GetColorAndOpacityTint());
+				HighestLayer = LayerId + 1;
+			}
+
+			if (const TArray<FHeightContour>* Contours = HeightContours.Get())
+			{
+				for (const FHeightContour& Contour : *Contours)
+				{
+					if (Contour.Points.Num() < 2)
+					{
+						continue;
+					}
+
+					TArray<FVector2D> DrawPoints;
+					DrawPoints.Reserve(Contour.Points.Num() + (Contour.bClosed ? 1 : 0));
+					for (const FVector2D& Point : Contour.Points)
+					{
+						DrawPoints.Add(ImageRect.DrawOffset + FVector2D(
+							Point.X * ImageRect.DrawSize.X,
+							Point.Y * ImageRect.DrawSize.Y));
+					}
+					if (Contour.bClosed && !DrawPoints[0].Equals(DrawPoints.Last(), KINDA_SMALL_NUMBER))
+					{
+						DrawPoints.Add(DrawPoints[0]);
+					}
+
+					FSlateDrawElement::MakeLines(
+						OutDrawElements,
+						LayerId + 2,
+						AllottedGeometry.ToPaintGeometry(),
+						DrawPoints,
+						ESlateDrawEffect::None,
+						FLinearColor(1.0f, 0.45f, 0.05f, 1.0f),
+						true,
+						FMath::Max(0.5f, ContourThickness.Get()));
+				}
+				if (!Contours->IsEmpty())
+				{
+					HighestLayer = LayerId + 2;
+				}
+			}
+		}
+
 		const bool bUseHoverMarker = HasHoverMarker.Get();
 		const bool bUseClickMarker = !bUseHoverMarker && HasMarker.Get();
 		if (bUseHoverMarker || bUseClickMarker)
@@ -102,17 +169,18 @@ public:
 			TArray<FVector2D> Horizontal;
 			Horizontal.Add(MarkerCenter + FVector2D(-Radius * 1.5f, 0.0f));
 			Horizontal.Add(MarkerCenter + FVector2D(Radius * 1.5f, 0.0f));
-			FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, AllottedGeometry.ToPaintGeometry(), Horizontal, ESlateDrawEffect::None, Outer, true, 3.0f);
-			FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 2, AllottedGeometry.ToPaintGeometry(), Horizontal, ESlateDrawEffect::None, Inner, true, 1.0f);
+			FSlateDrawElement::MakeLines(OutDrawElements, HighestLayer + 1, AllottedGeometry.ToPaintGeometry(), Horizontal, ESlateDrawEffect::None, Outer, true, 3.0f);
+			FSlateDrawElement::MakeLines(OutDrawElements, HighestLayer + 2, AllottedGeometry.ToPaintGeometry(), Horizontal, ESlateDrawEffect::None, Inner, true, 1.0f);
 
 			TArray<FVector2D> Vertical;
 			Vertical.Add(MarkerCenter + FVector2D(0.0f, -Radius * 1.5f));
 			Vertical.Add(MarkerCenter + FVector2D(0.0f, Radius * 1.5f));
-			FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, AllottedGeometry.ToPaintGeometry(), Vertical, ESlateDrawEffect::None, Outer, true, 3.0f);
-			FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 2, AllottedGeometry.ToPaintGeometry(), Vertical, ESlateDrawEffect::None, Inner, true, 1.0f);
+			FSlateDrawElement::MakeLines(OutDrawElements, HighestLayer + 1, AllottedGeometry.ToPaintGeometry(), Vertical, ESlateDrawEffect::None, Outer, true, 3.0f);
+			FSlateDrawElement::MakeLines(OutDrawElements, HighestLayer + 2, AllottedGeometry.ToPaintGeometry(), Vertical, ESlateDrawEffect::None, Inner, true, 1.0f);
+			HighestLayer += 2;
 		}
 
-		return LayerId + 2;
+		return HighestLayer;
 	}
 
 	virtual FReply OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override
@@ -151,6 +219,10 @@ private:
 	TAttribute<bool> HasMarker;
 	TAttribute<FVector2D> HoverMarkerUV;
 	TAttribute<bool> HasHoverMarker;
+	TAttribute<const FSlateBrush*> HeightZoneBrush;
+	TAttribute<const TArray<FHeightContour>*> HeightContours;
+	TAttribute<bool> HasHeightZone;
+	TAttribute<float> ContourThickness;
 	FSimpleDelegate OnUnavailableClicked;
 	FSimpleDelegate OnOutsideImageClicked;
 	TDelegate<void(FVector2D)> OnHeightmapClicked;
@@ -181,6 +253,15 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 
 	HeightmapBrush.DrawAs = ESlateBrushDrawType::Image;
 	HeightmapBrush.Tiling = ESlateBrushTileType::NoTile;
+	HeightZoneBrush.DrawAs = ESlateBrushDrawType::Image;
+	HeightZoneBrush.Tiling = ESlateBrushTileType::NoTile;
+	HeightZoneModeOptions =
+	{
+		MakeShared<EHeightZoneMode>(EHeightZoneMode::Above),
+		MakeShared<EHeightZoneMode>(EHeightZoneMode::Below),
+		MakeShared<EHeightZoneMode>(EHeightZoneMode::ContourOnly)
+	};
+	SelectedHeightZoneMode = HeightZoneModeOptions[0];
 
 	ClickDelegateHandle = FLandscapeHeightmapTrackerModule::OnViewportClickResult().AddSP(this, &SLandscapeHeightmapTrackerPanel::OnViewportClick);
 	HoverDelegateHandle = FLandscapeHeightmapTrackerModule::OnViewportHoverResult().AddSP(this, &SLandscapeHeightmapTrackerPanel::OnViewportHover);
@@ -284,6 +365,68 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 					]
 				]
 			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
+			[
+				SNew(STextBlock).Text(LOCTEXT("HeightZoneHeader", "Height Zone")).Font(FAppStyle::GetFontStyle("HeadingMedium"))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(LOCTEXT("HeightZoneTargetLabel", "Height, m"))
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f)
+				[
+					SNew(SNumericEntryBox<double>)
+						.AllowSpin(true)
+						.MinDesiredValueWidth(100.0f)
+						.Value_Lambda([this]() { return TOptional<double>(HeightZoneSettings.TargetHeightMeters); })
+						.OnValueChanged_Lambda([this](double NewValue) { HeightZoneSettings.TargetHeightMeters = NewValue; })
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 4.0f)
+			[
+				SNew(SComboBox<TSharedPtr<EHeightZoneMode>>)
+					.OptionsSource(&HeightZoneModeOptions)
+					.InitiallySelectedItem(SelectedHeightZoneMode)
+					.OnSelectionChanged_Lambda([this](TSharedPtr<EHeightZoneMode> NewMode, ESelectInfo::Type)
+					{
+						if (NewMode.IsValid())
+						{
+							SelectedHeightZoneMode = NewMode;
+							HeightZoneSettings.Mode = *NewMode;
+						}
+					})
+					.OnGenerateWidget_Lambda([](TSharedPtr<EHeightZoneMode> Mode)
+					{
+						const FText Text = !Mode.IsValid() || *Mode == EHeightZoneMode::Above
+							? LOCTEXT("HeightZoneAbove", "Above")
+							: (*Mode == EHeightZoneMode::Below
+								? LOCTEXT("HeightZoneBelow", "Below")
+								: LOCTEXT("HeightZoneContourOnly", "Contour Only"));
+						return SNew(STextBlock).Text(Text);
+					})
+				[
+					SNew(STextBlock).Text(this, &SLandscapeHeightmapTrackerPanel::GetHeightZoneModeText)
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+				[
+					SNew(SButton)
+						.Text(LOCTEXT("ApplyHeightZone", "Apply"))
+						.OnClicked(this, &SLandscapeHeightmapTrackerPanel::ApplyHeightZone)
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(4.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton)
+						.Text(LOCTEXT("ClearHeightZone", "Clear"))
+						.OnClicked(this, &SLandscapeHeightmapTrackerPanel::ClearHeightZone)
+				]
+			]
 			+ SVerticalBox::Slot().FillHeight(1.0f).MinHeight(320.0f).Padding(8.0f)
 			[
 				SNew(SBorder)
@@ -295,6 +438,10 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 					.HasMarker_Lambda([this]() { return bHasMarker && !bHoverTrackingHasViewportState; })
 					.HoverMarkerUV_Lambda([this]() { return HoverMarkerUV; })
 					.HasHoverMarker_Lambda([this]() { return bHasHoverMarker; })
+					.HeightZoneBrush_Lambda([this]() { return HeightZoneTexture ? &HeightZoneBrush : nullptr; })
+					.HeightContours_Lambda([this]() { return &HeightZoneResult.Contours; })
+					.HasHeightZone_Lambda([this]() { return HeightZoneSettings.bEnabled; })
+					.ContourThickness_Lambda([this]() { return HeightZoneSettings.ContourThickness; })
 					.OnUnavailableClicked(FSimpleDelegate::CreateLambda([this]() { UpdateStatus(LOCTEXT("NoHeightmapLoadedClick", "No heightmap loaded.")); }))
 					.OnOutsideImageClicked(FSimpleDelegate::CreateLambda([this]() { UpdateStatus(LOCTEXT("OutsideImageClick", "Click is outside the heightmap image area.")); }))
 					.OnHeightmapClicked(TDelegate<void(FVector2D)>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::OnHeightmapClicked))
@@ -467,6 +614,83 @@ FReply SLandscapeHeightmapTrackerPanel::ClearMarker()
 	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
 	InvalidateHeightmapMarkerPaint();
 	UpdateStatus(LOCTEXT("MarkerCleared", "All markers cleared."));
+	return FReply::Handled();
+}
+
+FReply SLandscapeHeightmapTrackerPanel::ApplyHeightZone()
+{
+	if (!AssignedLandscape.IsValid())
+	{
+		UpdateStatus(LOCTEXT("HeightZoneNoLandscape", "Height zone requires an assigned Landscape."));
+		return FReply::Handled();
+	}
+	if (!HeightmapTexture || HeightmapGrayscaleData.IsEmpty())
+	{
+		UpdateStatus(LOCTEXT("HeightZoneNoHeightmap", "Height zone requires a loaded heightmap."));
+		return FReply::Handled();
+	}
+	if (!FMath::IsFinite(HeightZoneSettings.TargetHeightMeters))
+	{
+		UpdateStatus(LOCTEXT("HeightZoneInvalidTarget", "Enter a valid finite height."));
+		return FReply::Handled();
+	}
+
+	FString Error;
+	if (!EnsureHeightMetersCache(Error))
+	{
+		UpdateStatus(FText::Format(
+			LOCTEXT("HeightZoneCacheFailed", "Height data could not be prepared: {0}"),
+			FText::FromString(Error)));
+		return FReply::Handled();
+	}
+
+	if (HeightZoneSettings.TargetHeightMeters < MinHeightMeters ||
+		HeightZoneSettings.TargetHeightMeters > MaxHeightMeters)
+	{
+		UpdateStatus(FText::Format(
+			LOCTEXT(
+				"HeightZoneOutsideRange",
+				"The selected height is outside the Landscape range. Landscape range: {0} m - {1} m."),
+			FText::AsNumber(MinHeightMeters),
+			FText::AsNumber(MaxHeightMeters)));
+		return FReply::Handled();
+	}
+
+	HeightZoneResult = FHeightZoneGenerator::Generate(
+		HeightMetersCache,
+		ImageSize.X,
+		ImageSize.Y,
+		HeightZoneSettings.TargetHeightMeters,
+		HeightZoneSettings.Mode);
+	if (HeightZoneResult.Mask.Num() != ImageSize.X * ImageSize.Y)
+	{
+		UpdateStatus(LOCTEXT("HeightZoneGenerationFailed", "Height zone generation failed."));
+		return FReply::Handled();
+	}
+
+	if (!UpdateHeightZoneTexture(Error))
+	{
+		ClearHeightZoneVisualization();
+		UpdateStatus(FText::Format(
+			LOCTEXT("HeightZoneTextureFailed", "Height zone overlay could not be created: {0}"),
+			FText::FromString(Error)));
+		return FReply::Handled();
+	}
+
+	HeightZoneSettings.bEnabled = true;
+	InvalidateHeightmapMarkerPaint();
+	UpdateStatus(FText::Format(
+		LOCTEXT("HeightZoneApplied", "Height zone applied. Range: {0} m - {1} m; contours: {2}."),
+		FText::AsNumber(MinHeightMeters),
+		FText::AsNumber(MaxHeightMeters),
+		FText::AsNumber(HeightZoneResult.Contours.Num())));
+	return FReply::Handled();
+}
+
+FReply SLandscapeHeightmapTrackerPanel::ClearHeightZone()
+{
+	ClearHeightZoneVisualization();
+	UpdateStatus(LOCTEXT("HeightZoneCleared", "Height zone cleared."));
 	return FReply::Handled();
 }
 
@@ -670,6 +894,8 @@ void SLandscapeHeightmapTrackerPanel::SetTrackingEnabled(ECheckBoxState NewState
 void SLandscapeHeightmapTrackerPanel::SetFlipX(ECheckBoxState NewState)
 {
 	bFlipX = NewState == ECheckBoxState::Checked;
+	InvalidateHeightMetersCache();
+	ClearHeightZoneVisualization();
 	ULandscapeTrackerSettings* Settings = GetMutableDefault<ULandscapeTrackerSettings>();
 	Settings->bFlipX = bFlipX;
 	Settings->SaveConfig();
@@ -678,6 +904,8 @@ void SLandscapeHeightmapTrackerPanel::SetFlipX(ECheckBoxState NewState)
 void SLandscapeHeightmapTrackerPanel::SetFlipY(ECheckBoxState NewState)
 {
 	bFlipY = NewState == ECheckBoxState::Checked;
+	InvalidateHeightMetersCache();
+	ClearHeightZoneVisualization();
 	ULandscapeTrackerSettings* Settings = GetMutableDefault<ULandscapeTrackerSettings>();
 	Settings->bFlipY = bFlipY;
 	Settings->SaveConfig();
@@ -692,10 +920,22 @@ void SLandscapeHeightmapTrackerPanel::AssignLandscape(ALandscapeProxy* InLandsca
 	ClearHoverMarker();
 	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
 	RefreshLandscapeBounds();
+	InvalidateHeightMetersCache();
+	ClearHeightZoneVisualization();
 	InvalidateHeightmapMarkerPaint();
 	if (AssignedLandscape.IsValid())
 	{
-		UpdateStatus(FText::Format(LOCTEXT("AssignedLandscape", "Assigned Landscape: {0}"), FText::FromString(AssignedLandscape->GetName())));
+		FString CacheError;
+		if (!HeightmapGrayscaleData.IsEmpty() && !EnsureHeightMetersCache(CacheError))
+		{
+			UpdateStatus(FText::Format(
+				LOCTEXT("AssignedLandscapeHeightCacheFailed", "Landscape assigned, but height data could not be prepared: {0}"),
+				FText::FromString(CacheError)));
+		}
+		else
+		{
+			UpdateStatus(FText::Format(LOCTEXT("AssignedLandscape", "Assigned Landscape: {0}"), FText::FromString(AssignedLandscape->GetName())));
+		}
 		UE_LOG(LogLandscapeHeightmapTrackerPanel, Log, TEXT("Assigned Landscape %s."), *AssignedLandscape->GetName());
 	}
 }
@@ -716,6 +956,9 @@ void SLandscapeHeightmapTrackerPanel::RefreshLandscapeBounds()
 void SLandscapeHeightmapTrackerPanel::ReleaseTexture()
 {
 	HeightmapBrush.SetResourceObject(nullptr);
+	HeightmapGrayscaleData.Reset();
+	InvalidateHeightMetersCache();
+	ClearHeightZoneVisualization();
 	bHasHeightmapImageInfo = false;
 	bSourceImageIsGrayscale = false;
 	ImageBitDepth = 0;
@@ -731,6 +974,16 @@ void SLandscapeHeightmapTrackerPanel::ReleaseTexture()
 	{
 		HeightmapTexture->RemoveFromRoot();
 		HeightmapTexture = nullptr;
+	}
+}
+
+void SLandscapeHeightmapTrackerPanel::ReleaseHeightZoneTexture()
+{
+	HeightZoneBrush.SetResourceObject(nullptr);
+	if (HeightZoneTexture)
+	{
+		HeightZoneTexture->RemoveFromRoot();
+		HeightZoneTexture = nullptr;
 	}
 }
 
@@ -810,6 +1063,8 @@ bool SLandscapeHeightmapTrackerPanel::LoadPngTexture(const FString& FilePath, FS
 	UniqueGrayscaleLevelCount = GrayscaleInfo.UniqueLevelCount;
 	MinGrayscaleValue = GrayscaleInfo.MinValue;
 	MaxGrayscaleValue = GrayscaleInfo.MaxValue;
+	HeightmapGrayscaleData = MoveTemp(GrayscaleData);
+	InvalidateHeightMetersCache();
 	bHasMarker = false;
 	bHoverTrackingHasViewportState = false;
 	ClearHoverMarker();
@@ -820,9 +1075,134 @@ bool SLandscapeHeightmapTrackerPanel::LoadPngTexture(const FString& FilePath, FS
 	Settings->LastHeightmapDirectory = FPaths::GetPath(FilePath);
 	Settings->SaveConfig();
 
-	UpdateStatus(FText::Format(LOCTEXT("HeightmapLoaded", "Heightmap loaded: {0} x {1} PNG."), FText::AsNumber(ImageSize.X), FText::AsNumber(ImageSize.Y)));
+	FString CacheError;
+	if (AssignedLandscape.IsValid() && !EnsureHeightMetersCache(CacheError))
+	{
+		UpdateStatus(FText::Format(
+			LOCTEXT("HeightmapLoadedCacheFailed", "Heightmap loaded, but height data could not be prepared: {0}"),
+			FText::FromString(CacheError)));
+	}
+	else
+	{
+		UpdateStatus(FText::Format(LOCTEXT("HeightmapLoaded", "Heightmap loaded: {0} x {1} PNG."), FText::AsNumber(ImageSize.X), FText::AsNumber(ImageSize.Y)));
+	}
 	UE_LOG(LogLandscapeHeightmapTrackerPanel, Log, TEXT("Loaded heightmap %s (%d x %d)."), *FilePath, ImageSize.X, ImageSize.Y);
 	return true;
+}
+
+bool SLandscapeHeightmapTrackerPanel::EnsureHeightMetersCache(FString& OutError)
+{
+	RefreshLandscapeBounds();
+	if (!AssignedLandscape.IsValid())
+	{
+		OutError = TEXT("No Landscape is assigned.");
+		return false;
+	}
+
+	const FTransform CurrentTransform = AssignedLandscape->GetActorTransform();
+	const bool bCacheMatches =
+		bHeightMetersCacheValid &&
+		CachedLandscapeTransform.Equals(CurrentTransform) &&
+		CachedHeightBounds.Min.Equals(LocalBounds.Min) &&
+		CachedHeightBounds.Max.Equals(LocalBounds.Max) &&
+		CachedHeightImageSize == ImageSize &&
+		CachedHeightBitDepth == ImageBitDepth &&
+		bCachedFlipX == bFlipX &&
+		bCachedFlipY == bFlipY;
+	if (bCacheMatches)
+	{
+		return true;
+	}
+
+	FLandscapeTrackerMappingOptions MappingOptions;
+	MappingOptions.bFlipX = bFlipX;
+	MappingOptions.bFlipY = bFlipY;
+	FHeightmapWorldHeightData Data = FHeightmapWorldHeightCache::Build(
+		HeightmapGrayscaleData,
+		ImageBitDepth,
+		ImageSize,
+		LocalBounds,
+		CurrentTransform,
+		MappingOptions,
+		OutError);
+	if (!Data.bIsValid)
+	{
+		return false;
+	}
+
+	HeightMetersCache = MoveTemp(Data.HeightMeters);
+	MinHeightMeters = Data.MinHeightMeters;
+	MaxHeightMeters = Data.MaxHeightMeters;
+	CachedLandscapeTransform = CurrentTransform;
+	CachedHeightBounds = LocalBounds;
+	CachedHeightImageSize = ImageSize;
+	CachedHeightBitDepth = ImageBitDepth;
+	bCachedFlipX = bFlipX;
+	bCachedFlipY = bFlipY;
+	bHeightMetersCacheValid = true;
+	return true;
+}
+
+bool SLandscapeHeightmapTrackerPanel::UpdateHeightZoneTexture(FString& OutError)
+{
+	ReleaseHeightZoneTexture();
+	if (HeightZoneSettings.Mode == EHeightZoneMode::ContourOnly)
+	{
+		return true;
+	}
+	if (HeightZoneResult.Mask.Num() != ImageSize.X * ImageSize.Y)
+	{
+		OutError = TEXT("mask dimensions do not match the heightmap.");
+		return false;
+	}
+
+	TArray<FColor> OverlayPixels;
+	OverlayPixels.SetNumUninitialized(HeightZoneResult.Mask.Num());
+	const uint8 Alpha = static_cast<uint8>(FMath::Clamp(
+		FMath::RoundToInt(HeightZoneSettings.FillOpacity * 255.0f),
+		0,
+		255));
+	for (int32 Index = 0; Index < HeightZoneResult.Mask.Num(); ++Index)
+	{
+		OverlayPixels[Index] = HeightZoneResult.Mask[Index] != 0
+			? FColor(255, 96, 0, Alpha)
+			: FColor(0, 0, 0, 0);
+	}
+
+	HeightZoneTexture = UTexture2D::CreateTransient(ImageSize.X, ImageSize.Y, PF_B8G8R8A8);
+	if (!HeightZoneTexture)
+	{
+		OutError = TEXT("transient texture allocation failed.");
+		return false;
+	}
+
+	HeightZoneTexture->AddToRoot();
+	HeightZoneTexture->SRGB = false;
+	void* TextureData = HeightZoneTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+	FMemory::Memcpy(TextureData, OverlayPixels.GetData(), OverlayPixels.Num() * sizeof(FColor));
+	HeightZoneTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
+	HeightZoneTexture->UpdateResource();
+	HeightZoneBrush.SetResourceObject(HeightZoneTexture);
+	HeightZoneBrush.SetImageSize(FVector2D(ImageSize.X, ImageSize.Y));
+	return true;
+}
+
+void SLandscapeHeightmapTrackerPanel::InvalidateHeightMetersCache()
+{
+	bHeightMetersCacheValid = false;
+	HeightMetersCache.Reset();
+	MinHeightMeters = 0.0f;
+	MaxHeightMeters = 0.0f;
+	CachedHeightImageSize = FIntPoint::ZeroValue;
+	CachedHeightBitDepth = 0;
+}
+
+void SLandscapeHeightmapTrackerPanel::ClearHeightZoneVisualization()
+{
+	HeightZoneSettings.bEnabled = false;
+	HeightZoneResult = FHeightZoneResult();
+	ReleaseHeightZoneTexture();
+	InvalidateHeightmapMarkerPaint();
 }
 
 bool SLandscapeHeightmapTrackerPanel::IsAssignedLandscapeHit(AActor* HitActor, UPrimitiveComponent* HitComponent) const
@@ -952,5 +1332,17 @@ FText SLandscapeHeightmapTrackerPanel::GetUvText() const
 }
 FText SLandscapeHeightmapTrackerPanel::GetPixelText() const { return LastMapping.bIsValid ? FText::Format(LOCTEXT("PixelFormat", "X={0} Y={1}"), FText::AsNumber(LastMapping.Pixel.X), FText::AsNumber(LastMapping.Pixel.Y)) : FText::GetEmpty(); }
 FText SLandscapeHeightmapTrackerPanel::GetStatusText() const { return StatusText; }
+FText SLandscapeHeightmapTrackerPanel::GetHeightZoneModeText() const
+{
+	switch (HeightZoneSettings.Mode)
+	{
+	case EHeightZoneMode::Below:
+		return LOCTEXT("HeightZoneBelow", "Below");
+	case EHeightZoneMode::ContourOnly:
+		return LOCTEXT("HeightZoneContourOnly", "Contour Only");
+	default:
+		return LOCTEXT("HeightZoneAbove", "Above");
+	}
+}
 
 #undef LOCTEXT_NAMESPACE
