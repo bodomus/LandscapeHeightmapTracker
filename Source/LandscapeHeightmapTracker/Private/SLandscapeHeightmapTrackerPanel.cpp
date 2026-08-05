@@ -19,6 +19,7 @@
 #include "LandscapeProxy.h"
 #include "LandscapeSurfaceTraceHelper.h"
 #include "LandscapeTrackerSettings.h"
+#include "SLandscapePaintLayerBulkRemoveWidget.h"
 #include "Misc/FileHelper.h"
 #include "Modules/ModuleManager.h"
 #include "PropertyCustomizationHelpers.h"
@@ -309,6 +310,14 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
 			[
 				MakeLabelValue(LOCTEXT("Bounds", "Local XY bounds:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetLocalBoundsText))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
+			[
+				SNew(STextBlock).Text(LOCTEXT("PaintLayersHeader", "Landscape Paint Layers")).Font(FAppStyle::GetFontStyle("HeadingMedium"))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
+			[
+				SNew(SLandscapePaintLayerBulkRemoveWidget)
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
 			[
