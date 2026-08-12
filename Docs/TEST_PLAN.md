@@ -9,11 +9,17 @@ LandscapeHeightmapTracker.Mapper.*
 LandscapeHeightmapTracker.ViewportTrace.*
 LandscapeHeightmapTracker.ReverseMapping.*
 LandscapeHeightmapTracker.HeightZone.*
+LandscapeHeightmapTracker.PaintLayers.*
+LandscapeHeightmapTracker.UI.*
 ```
 
 The mapper tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
 
 The reverse mapping tests cover UV-to-local center, corners, Flip X inversion, Flip Y inversion, non-square bounds, invalid bounds, outside UV rejection, fitted-image click hit testing, and finite vertical trace segment construction.
+
+The UI singleton test requires a rendering-capable editor session (for example,
+-RenderOffscreen). It opens both tool tabs, verifies that repeated Paint Layers
+invocation reuses one tab, and saves UE5-14 Slate screenshots under Saved/Automation/UE5-14.
 
 The viewport trace tests cover:
 

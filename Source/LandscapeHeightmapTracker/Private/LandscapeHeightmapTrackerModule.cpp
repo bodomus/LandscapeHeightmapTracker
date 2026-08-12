@@ -8,6 +8,7 @@
 #include "LandscapeHeightmapTrackerEdMode.h"
 #include "LandscapeHeightmapTrackerStyle.h"
 #include "LevelEditor.h"
+#include "SLandscapePaintLayerBulkRemoveWidget.h"
 #include "SLandscapeHeightmapTrackerPanel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -19,6 +20,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogLandscapeHeightmapTracker, Log, All);
 
 const FName FLandscapeHeightmapTrackerModule::PluginTabName(TEXT("LandscapeHeightmapTracker"));
+const FName FLandscapeHeightmapTrackerModule::PaintLayersTabName(TEXT("LandscapeHeightmapTracker.PaintLayers"));
 const FName FLandscapeHeightmapTrackerModule::EditorModeId(TEXT("EM_LandscapeHeightmapTracker"));
 
 static FLandscapeHeightmapTrackerModule::FOnViewportClickResult GOnViewportClickResult;
@@ -190,6 +192,10 @@ void FLandscapeHeightmapTrackerModule::StartupModule()
 	FGlobalTabmanager::Get()->RegisterNomadTabSpawner(PluginTabName, FOnSpawnTab::CreateRaw(this, &FLandscapeHeightmapTrackerModule::OnSpawnPluginTab))
 		.SetDisplayName(FText::Format(LOCTEXT("LandscapeHeightmapTrackerTabTitle", "Landscape Heightmap Tracker {0}"), FText::FromString(GetPluginVersion())))
 		.SetMenuType(ETabSpawnerMenuType::Hidden);
+
+	FGlobalTabmanager::Get()->RegisterNomadTabSpawner(PaintLayersTabName, FOnSpawnTab::CreateRaw(this, &FLandscapeHeightmapTrackerModule::OnSpawnPaintLayersTab))
+		.SetDisplayName(LOCTEXT("LandscapePaintLayersTabTitle", "Landscape Paint Layers"))
+		.SetMenuType(ETabSpawnerMenuType::Hidden);
 }
 
 void FLandscapeHeightmapTrackerModule::ShutdownModule()
@@ -205,6 +211,7 @@ void FLandscapeHeightmapTrackerModule::ShutdownModule()
 	UToolMenus::UnregisterOwner(this);
 
 	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PluginTabName);
+	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PaintLayersTabName);
 	FEditorModeRegistry::Get().UnregisterMode(EditorModeId);
 
 	FLandscapeHeightmapTrackerCommands::Unregister();
@@ -218,6 +225,16 @@ TSharedRef<SDockTab> FLandscapeHeightmapTrackerModule::OnSpawnPluginTab(const FS
 		.TabRole(ETabRole::NomadTab)
 		[
 			SNew(SLandscapeHeightmapTrackerPanel)
+		];
+}
+
+TSharedRef<SDockTab> FLandscapeHeightmapTrackerModule::OnSpawnPaintLayersTab(const FSpawnTabArgs& SpawnTabArgs)
+{
+	UE_LOG(LogLandscapeHeightmapTracker, Log, TEXT("Opening Landscape Paint Layers tab."));
+	return SNew(SDockTab)
+		.TabRole(ETabRole::NomadTab)
+		[
+			SNew(SLandscapePaintLayerBulkRemoveWidget)
 		];
 }
 

@@ -6,6 +6,7 @@
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Framework/Docking/TabManager.h"
 #include "HeightmapImageClickMapper.h"
 #include "HeightmapImageInfoAnalyzer.h"
 #include "HeightmapWorldHeightCache.h"
@@ -19,7 +20,6 @@
 #include "LandscapeProxy.h"
 #include "LandscapeSurfaceTraceHelper.h"
 #include "LandscapeTrackerSettings.h"
-#include "SLandscapePaintLayerBulkRemoveWidget.h"
 #include "Misc/FileHelper.h"
 #include "Modules/ModuleManager.h"
 #include "PropertyCustomizationHelpers.h"
@@ -276,6 +276,16 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f)
 			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(0.5f).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+				[
+					SNew(SBorder)
+					.BorderImage(FAppStyle::GetBrush("Brushes.Panel"))
+					.Padding(0.0f)
+					[
+						SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f)
+			[
 				SNew(STextBlock).Text(FText::Format(LOCTEXT("LandscapeHeader", "Landscape {0}"), FText::FromString(FLandscapeHeightmapTrackerModule::GetPluginVersion()))).Font(FAppStyle::GetFontStyle("HeadingMedium"))
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f)
@@ -311,14 +321,15 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 			[
 				MakeLabelValue(LOCTEXT("Bounds", "Local XY bounds:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetLocalBoundsText))
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
-			[
-				SNew(STextBlock).Text(LOCTEXT("PaintLayersHeader", "Landscape Paint Layers")).Font(FAppStyle::GetFontStyle("HeadingMedium"))
-			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
-			[
-				SNew(SLandscapePaintLayerBulkRemoveWidget)
-			]
+					]
+				]
+				+ SHorizontalBox::Slot().FillWidth(0.5f).Padding(4.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder)
+					.BorderImage(FAppStyle::GetBrush("Brushes.Panel"))
+					.Padding(0.0f)
+					[
+						SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
 			[
 				SNew(STextBlock).Text(LOCTEXT("HeightmapHeader", "Heightmap")).Font(FAppStyle::GetFontStyle("HeadingMedium"))
@@ -374,10 +385,26 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 					]
 				]
 			]
+					]
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 4.0f)
+			[
+				SNew(SButton)
+				.Text(LOCTEXT("OpenPaintLayers", "Landscape Paint Layers..."))
+				.ToolTipText(LOCTEXT("OpenPaintLayersTooltip", "Open Landscape Paint Layers in a separate editor tab."))
+				.OnClicked(this, &SLandscapeHeightmapTrackerPanel::OpenPaintLayers)
+			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
 			[
 				SNew(STextBlock).Text(LOCTEXT("HeightZoneHeader", "Height Zone")).Font(FAppStyle::GetFontStyle("HeadingMedium"))
 			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(0.65f).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
 			[
 				SNew(SHorizontalBox)
@@ -436,10 +463,12 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 						.OnClicked(this, &SLandscapeHeightmapTrackerPanel::ClearHeightZone)
 				]
 			]
-			+ SVerticalBox::Slot().FillHeight(1.0f).MinHeight(320.0f).Padding(8.0f)
+			+ SVerticalBox::Slot().FillHeight(1.0f).MinHeight(320.0f).Padding(0.0f, 8.0f, 0.0f, 0.0f)
 			[
 				SNew(SBorder)
 				.BorderImage(FAppStyle::GetBrush("Brushes.Panel"))
+				.HAlign(HAlign_Left)
+				.VAlign(VAlign_Top)
 				[
 					SAssignNew(HeightmapImageWidget, SHeightmapTrackerImageView)
 					.ImageBrush_Lambda([this]() { return HeightmapTexture ? &HeightmapBrush : nullptr; })
@@ -456,6 +485,17 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 					.OnHeightmapClicked(TDelegate<void(FVector2D)>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::OnHeightmapClicked))
 				]
 			]
+				]
+				+ SHorizontalBox::Slot().FillWidth(0.35f)
+				[
+					SNew(SBorder)
+					.BorderImage(FAppStyle::GetBrush("Brushes.Panel"))
+					.Padding(0.0f)
+					[
+						SNew(SBox)
+						.MinDesiredWidth(280.0f)
+						[
+							SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 8.0f)
 			[
 				SNew(STextBlock).Text(LOCTEXT("TrackingHeader", "Tracking")).Font(FAppStyle::GetFontStyle("HeadingMedium"))
@@ -523,6 +563,10 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 				.Text(this, &SLandscapeHeightmapTrackerPanel::GetStatusText)
 				.AutoWrapText(true)
 			]
+						]
+					]
+				]
+			]
 		]
 	];
 
@@ -541,6 +585,12 @@ SLandscapeHeightmapTrackerPanel::~SLandscapeHeightmapTrackerPanel()
 	FLandscapeHeightmapTrackerModule::SetTrackingModeEnabled(false);
 	FLandscapeHeightmapTrackerModule::ClearReverseMarker();
 	ReleaseTexture();
+}
+
+FReply SLandscapeHeightmapTrackerPanel::OpenPaintLayers()
+{
+	FGlobalTabmanager::Get()->TryInvokeTab(FLandscapeHeightmapTrackerModule::PaintLayersTabName);
+	return FReply::Handled();
 }
 
 FReply SLandscapeHeightmapTrackerPanel::UseSelectedLandscape()

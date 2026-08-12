@@ -28,6 +28,7 @@ public:
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnViewportHoverResult, const FViewportHoverResult&);
 
 	static const FName PluginTabName;
+	static const FName PaintLayersTabName;
 	static const FName EditorModeId;
 
 	static FOnViewportClickResult& OnViewportClickResult();
@@ -47,6 +48,7 @@ private:
 	void RegisterMenus();
 	void PluginButtonClicked();
 	TSharedRef<class SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
+	TSharedRef<class SDockTab> OnSpawnPaintLayersTab(const class FSpawnTabArgs& SpawnTabArgs);
 
 	TSharedPtr<class FUICommandList> PluginCommands;
 };

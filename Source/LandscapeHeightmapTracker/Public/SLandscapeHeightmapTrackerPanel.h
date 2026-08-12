@@ -20,6 +20,7 @@ public:
 
 private:
 	FReply UseSelectedLandscape();
+	FReply OpenPaintLayers();
 	FReply LoadHeightmap();
 	FReply ClearMarker();
 	FReply ApplyHeightZone();
