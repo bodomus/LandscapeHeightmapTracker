@@ -5,9 +5,16 @@
 #include "LandscapeCoordinateMapper.h"
 #include "LandscapeHeightmapTrackerModule.h"
 #include "Widgets/SCompoundWidget.h"
+#include "Widgets/Views/SListView.h"
 
 class ALandscapeProxy;
 class UTexture2D;
+
+struct FHeightRangeColorOption
+{
+	FText Name;
+	FLinearColor Color = FLinearColor(0.0f, 0.8f, 1.0f, 1.0f);
+};
 
 class SLandscapeHeightmapTrackerPanel : public SCompoundWidget
 {
@@ -18,6 +25,16 @@ public:
 	void Construct(const FArguments& InArgs);
 	virtual ~SLandscapeHeightmapTrackerPanel() override;
 
+#if WITH_DEV_AUTOMATION_TESTS
+	bool ConfigureMultiHeightRangePreviewForTesting(
+		const TArray<float>& HeightMeters,
+		int32 Width,
+		int32 Height,
+		const TArray<FHeightRangeDefinition>& Ranges,
+		FString& OutError);
+	TSharedPtr<SWidget> GetHeightmapImageWidgetForTesting() const { return HeightmapImageWidget; }
+#endif
+
 private:
 	FReply UseSelectedLandscape();
 	FReply OpenPaintLayers();
@@ -25,6 +42,17 @@ private:
 	FReply ClearMarker();
 	FReply ApplyHeightZone();
 	FReply ClearHeightZone();
+	FReply AddHeightRange();
+	FReply RemoveSelectedHeightRange();
+	FReply ClearAllHeightRanges();
+	TSharedRef<ITableRow> GenerateHeightRangeRow(
+		TSharedPtr<int32> Item,
+		const TSharedRef<STableViewBase>& OwnerTable);
+	void OnHeightRangeSelectionChanged(TSharedPtr<int32> Item, ESelectInfo::Type SelectInfo);
+	void SetHeightRangeEnabled(int32 RangeIndex, ECheckBoxState NewState);
+	void RefreshHeightRangeListItems();
+	bool RebuildMultiHeightRangeVisualization(FString& OutError);
+	bool CanRemoveSelectedHeightRange() const;
 	void OnObjectSelected(const FAssetData& AssetData);
 	void OnViewportClick(const FLandscapeHeightmapTrackerModule::FViewportClickResult& Click);
 	void OnViewportHover(const FLandscapeHeightmapTrackerModule::FViewportHoverResult& Hover);
@@ -45,6 +73,7 @@ private:
 	void ClearHoverMarker();
 	bool SetHoverMarkerUV(const FVector2D& NewUV);
 	void InvalidateHeightmapMarkerPaint();
+	void LogHeightSampleDiagnostics() const;
 	void UpdateStatus(const FText& InStatus);
 
 	ECheckBoxState IsTrackingChecked() const;
@@ -67,8 +96,12 @@ private:
 	FText GetLocalText() const;
 	FText GetUvText() const;
 	FText GetPixelText() const;
+	FText GetHeightRangeDiagnosticsText() const;
+	FText GetHeightSampleDiagnosticsText() const;
 	FText GetStatusText() const;
 	FText GetHeightZoneModeText() const;
+	FText GetSelectedHeightRangeColorText() const;
+	const TArray<FHeightContour>* GetActiveHeightContours() const;
 
 	TWeakObjectPtr<ALandscapeProxy> AssignedLandscape;
 	FLandscapeTrackerBounds LocalBounds;
@@ -85,7 +118,10 @@ private:
 	uint16 MinGrayscaleValue = 0;
 	uint16 MaxGrayscaleValue = 0;
 	TArray64<uint8> HeightmapGrayscaleData;
+	TArray<uint16> HeightRawValueCache;
 	TArray<float> HeightMetersCache;
+	uint16 MinRawHeight = 0;
+	uint16 MaxRawHeight = 0;
 	float MinHeightMeters = 0.0f;
 	float MaxHeightMeters = 0.0f;
 	FTransform CachedLandscapeTransform;
@@ -96,8 +132,15 @@ private:
 	bool bCachedFlipY = true;
 	FHeightZoneSettings HeightZoneSettings;
 	FHeightZoneResult HeightZoneResult;
+	TArray<FHeightRangeDefinition> HeightRanges;
+	FMultiHeightRangeResult MultiHeightRangeResult;
 	TArray<TSharedPtr<EHeightZoneMode>> HeightZoneModeOptions;
 	TSharedPtr<EHeightZoneMode> SelectedHeightZoneMode;
+	TArray<TSharedPtr<FHeightRangeColorOption>> HeightRangeColorOptions;
+	TSharedPtr<FHeightRangeColorOption> SelectedHeightRangeColor;
+	TArray<TSharedPtr<int32>> HeightRangeListItems;
+	TSharedPtr<int32> SelectedHeightRangeItem;
+	TSharedPtr<SListView<TSharedPtr<int32>>> HeightRangeListView;
 	FText StatusText;
 	bool bHasHeightmapImageInfo = false;
 	bool bSourceImageIsGrayscale = false;
@@ -109,6 +152,7 @@ private:
 	bool bFlipX = false;
 	bool bFlipY = true;
 	bool bHeightMetersCacheValid = false;
+	bool bUsingMultiRangeVisualization = false;
 
 	UTexture2D* HeightmapTexture = nullptr;
 	UTexture2D* HeightZoneTexture = nullptr;

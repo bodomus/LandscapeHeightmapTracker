@@ -180,37 +180,13 @@ TArray<FHeightContour> JoinSegments(const TArray<FContourSegment>& Segments)
 
 	return Contours;
 }
-}
 
-FHeightZoneResult FHeightZoneGenerator::Generate(
+TArray<FHeightContour> GenerateContours(
 	const TArray<float>& HeightMeters,
 	int32 Width,
 	int32 Height,
-	double TargetHeightMeters,
-	EHeightZoneMode Mode)
+	double TargetHeightMeters)
 {
-	FHeightZoneResult Result;
-	Result.TargetHeightMeters = TargetHeightMeters;
-	Result.Width = Width;
-	Result.Height = Height;
-
-	if (Width < 2 || Height < 2 || HeightMeters.Num() != Width * Height)
-	{
-		return Result;
-	}
-
-	Result.Mask.SetNumZeroed(Width * Height);
-	if (Mode != EHeightZoneMode::ContourOnly)
-	{
-		for (int32 Index = 0; Index < HeightMeters.Num(); ++Index)
-		{
-			const bool bSelected = Mode == EHeightZoneMode::Above
-				? HeightMeters[Index] >= TargetHeightMeters
-				: HeightMeters[Index] <= TargetHeightMeters;
-			Result.Mask[Index] = bSelected ? 255 : 0;
-		}
-	}
-
 	TArray<FContourSegment> Segments;
 	for (int32 Y = 0; Y < Height - 1; ++Y)
 	{
@@ -256,14 +232,90 @@ FHeightZoneResult FHeightZoneGenerator::Generate(
 		}
 	}
 
-	Result.Contours = JoinSegments(Segments);
-	for (FHeightContour& Contour : Result.Contours)
+	TArray<FHeightContour> Contours = JoinSegments(Segments);
+	for (FHeightContour& Contour : Contours)
 	{
+		Contour.BoundaryHeightMeters = TargetHeightMeters;
 		for (FVector2D& Point : Contour.Points)
 		{
 			Point.X /= Width - 1;
 			Point.Y /= Height - 1;
 		}
+	}
+	return Contours;
+}
+}
+
+bool FHeightZoneGenerator::DoesRangeOverlap(
+	double HeightAMeters,
+	double HeightBMeters,
+	double AvailableMinHeightMeters,
+	double AvailableMaxHeightMeters)
+{
+	const double Low = FMath::Min(HeightAMeters, HeightBMeters);
+	const double High = FMath::Max(HeightAMeters, HeightBMeters);
+	const double AvailableLow = FMath::Min(AvailableMinHeightMeters, AvailableMaxHeightMeters);
+	const double AvailableHigh = FMath::Max(AvailableMinHeightMeters, AvailableMaxHeightMeters);
+	return High >= AvailableLow && Low <= AvailableHigh;
+}
+
+FHeightZoneResult FHeightZoneGenerator::Generate(
+	const TArray<float>& HeightMeters,
+	int32 Width,
+	int32 Height,
+	double TargetHeightMeters,
+	EHeightZoneMode Mode)
+{
+	return Generate(HeightMeters, Width, Height, TargetHeightMeters, TargetHeightMeters, Mode);
+}
+
+FHeightZoneResult FHeightZoneGenerator::Generate(
+	const TArray<float>& HeightMeters,
+	int32 Width,
+	int32 Height,
+	double HeightAMeters,
+	double HeightBMeters,
+	EHeightZoneMode Mode)
+{
+	FHeightZoneResult Result;
+	const bool bRange = Mode == EHeightZoneMode::Range;
+	Result.MinHeightMeters = bRange ? FMath::Min(HeightAMeters, HeightBMeters) : HeightAMeters;
+	Result.MaxHeightMeters = bRange ? FMath::Max(HeightAMeters, HeightBMeters) : HeightAMeters;
+	Result.Width = Width;
+	Result.Height = Height;
+
+	if (Width < 2 || Height < 2 || HeightMeters.Num() != Width * Height)
+	{
+		return Result;
+	}
+
+	Result.Mask.SetNumZeroed(Width * Height);
+	if (Mode != EHeightZoneMode::ContourOnly)
+	{
+		for (int32 Index = 0; Index < HeightMeters.Num(); ++Index)
+		{
+			bool bSelected = false;
+			switch (Mode)
+			{
+			case EHeightZoneMode::Above:
+				bSelected = HeightMeters[Index] >= HeightAMeters;
+				break;
+			case EHeightZoneMode::Range:
+				bSelected = HeightMeters[Index] >= Result.MinHeightMeters &&
+					HeightMeters[Index] <= Result.MaxHeightMeters;
+				break;
+			default:
+				bSelected = HeightMeters[Index] <= HeightAMeters;
+				break;
+			}
+			Result.Mask[Index] = bSelected ? 255 : 0;
+		}
+	}
+
+	Result.Contours = GenerateContours(HeightMeters, Width, Height, Result.MinHeightMeters);
+	if (bRange && !FMath::IsNearlyEqual(Result.MinHeightMeters, Result.MaxHeightMeters))
+	{
+		Result.Contours.Append(GenerateContours(HeightMeters, Width, Height, Result.MaxHeightMeters));
 	}
 	return Result;
 }

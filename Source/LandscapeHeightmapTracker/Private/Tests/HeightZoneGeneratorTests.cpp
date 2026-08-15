@@ -117,3 +117,47 @@ bool FHeightZoneExactAndNegativeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Negative-height contour is finite"), HasOnlyFinitePoints(NegativeResult));
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHeightZoneRangeTest, "LandscapeHeightmapTracker.HeightZone.Range", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FHeightZoneRangeTest::RunTest(const FString& Parameters)
+{
+	TestTrue(
+		TEXT("Partially overlapping range remains applicable"),
+		FHeightZoneGenerator::DoesRangeOverlap(100.0, 800.0, -588.728, 588.782));
+	TestTrue(
+		TEXT("Reversed partially overlapping range remains applicable"),
+		FHeightZoneGenerator::DoesRangeOverlap(800.0, 100.0, -588.728, 588.782));
+	TestFalse(
+		TEXT("Range entirely above available heights is rejected"),
+		FHeightZoneGenerator::DoesRangeOverlap(600.0, 800.0, -588.728, 588.782));
+	TestFalse(
+		TEXT("Range entirely below available heights is rejected"),
+		FHeightZoneGenerator::DoesRangeOverlap(-800.0, -600.0, -588.728, 588.782));
+
+	const TArray<float> Heights =
+	{
+		0, 5, 10,
+		0, 5, 10,
+		0, 5, 10
+	};
+	const FHeightZoneResult Forward = FHeightZoneGenerator::Generate(
+		Heights, 3, 3, 2.5, 7.5, EHeightZoneMode::Range);
+	const FHeightZoneResult Reverse = FHeightZoneGenerator::Generate(
+		Heights, 3, 3, 7.5, 2.5, EHeightZoneMode::Range);
+
+	TestEqual(TEXT("Range normalizes minimum"), Forward.MinHeightMeters, 2.5);
+	TestEqual(TEXT("Range normalizes maximum"), Forward.MaxHeightMeters, 7.5);
+	TestEqual(TEXT("Range selects only middle column"), static_cast<int32>(Algo::Count(Forward.Mask, static_cast<uint8>(255))), 3);
+	TestTrue(TEXT("Reversed range has identical mask"), Reverse.Mask == Forward.Mask);
+	TestEqual(TEXT("Range produces both boundary contours"), Forward.Contours.Num(), 2);
+	TestEqual(TEXT("First contour is tagged with lower boundary"), Forward.Contours[0].BoundaryHeightMeters, 2.5);
+	TestEqual(TEXT("Second contour is tagged with upper boundary"), Forward.Contours[1].BoundaryHeightMeters, 7.5);
+	TestTrue(TEXT("Range contour coordinates are finite"), HasOnlyFinitePoints(Forward));
+
+	const FHeightZoneResult Equal = FHeightZoneGenerator::Generate(
+		Heights, 3, 3, 5.0, 5.0, EHeightZoneMode::Range);
+	TestEqual(TEXT("Equal range includes exact threshold"), static_cast<int32>(Algo::Count(Equal.Mask, static_cast<uint8>(255))), 3);
+	TestEqual(TEXT("Equal range does not duplicate the boundary contour"), Equal.Contours.Num(), 1);
+	return true;
+}

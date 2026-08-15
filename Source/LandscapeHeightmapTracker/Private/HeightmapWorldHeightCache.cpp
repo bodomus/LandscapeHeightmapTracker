@@ -32,7 +32,10 @@ FHeightmapWorldHeightData FHeightmapWorldHeightCache::Build(
 		return Result;
 	}
 
+	Result.RawHeights.SetNumUninitialized(static_cast<int32>(SampleCount));
 	Result.HeightMeters.SetNumUninitialized(static_cast<int32>(SampleCount));
+	Result.MinRawHeight = MAX_uint16;
+	Result.MaxRawHeight = 0;
 	Result.MinHeightMeters = TNumericLimits<float>::Max();
 	Result.MaxHeightMeters = TNumericLimits<float>::Lowest();
 
@@ -59,7 +62,10 @@ FHeightmapWorldHeightData FHeightmapWorldHeightCache::Build(
 				HeightValue,
 				FVector2D(Mapping.LocalPosition.X, Mapping.LocalPosition.Y),
 				LandscapeTransform));
+			Result.RawHeights[SampleIndex] = HeightValue;
 			Result.HeightMeters[SampleIndex] = HeightMeters;
+			Result.MinRawHeight = FMath::Min(Result.MinRawHeight, HeightValue);
+			Result.MaxRawHeight = FMath::Max(Result.MaxRawHeight, HeightValue);
 			Result.MinHeightMeters = FMath::Min(Result.MinHeightMeters, HeightMeters);
 			Result.MaxHeightMeters = FMath::Max(Result.MaxHeightMeters, HeightMeters);
 		}
@@ -81,12 +87,22 @@ uint16 FHeightmapWorldHeightCache::ExpandSampleToLandscapeHeight(const uint8* Sa
 	return Value;
 }
 
+double FHeightmapWorldHeightCache::NormalizeLandscapeHeight(uint16 LandscapeHeight)
+{
+	return static_cast<double>(LandscapeHeight) / MAX_uint16;
+}
+
+double FHeightmapWorldHeightCache::LandscapeHeightToLocalZ(uint16 LandscapeHeight)
+{
+	return LandscapeDataAccess::GetLocalHeight(LandscapeHeight);
+}
+
 double FHeightmapWorldHeightCache::LandscapeHeightToWorldMeters(
 	uint16 LandscapeHeight,
 	const FVector2D& LocalXY,
 	const FTransform& LandscapeTransform)
 {
-	const double LocalZ = LandscapeDataAccess::GetLocalHeight(LandscapeHeight);
+	const double LocalZ = LandscapeHeightToLocalZ(LandscapeHeight);
 	const FVector WorldPosition = LandscapeTransform.TransformPosition(FVector(LocalXY.X, LocalXY.Y, LocalZ));
 	return WorldPosition.Z / 100.0;
 }

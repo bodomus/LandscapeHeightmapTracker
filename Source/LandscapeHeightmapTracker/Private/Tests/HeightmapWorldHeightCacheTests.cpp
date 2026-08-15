@@ -11,6 +11,14 @@ bool FHeightmapWorldHeightConversionTest::RunTest(const FString& Parameters)
 		TEXT("8-bit maximum expands to full Landscape range"),
 		FHeightmapWorldHeightCache::ExpandSampleToLandscapeHeight(&EightBitMaximum, 8),
 		MAX_uint16);
+	TestEqual(
+		TEXT("Landscape midpoint normalization is stable"),
+		FHeightmapWorldHeightCache::NormalizeLandscapeHeight(32768),
+		32768.0 / 65535.0);
+	TestEqual(
+		TEXT("Landscape midpoint has zero local Z"),
+		FHeightmapWorldHeightCache::LandscapeHeightToLocalZ(32768),
+		0.0);
 
 	const FTransform Transform(
 		FRotator::ZeroRotator,
@@ -54,6 +62,9 @@ bool FHeightmapWorldHeightCacheBuildTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Cache build succeeds"), Data.bIsValid);
 	TestTrue(TEXT("Cache build error is empty"), Error.IsEmpty());
 	TestEqual(TEXT("Cache contains every sample"), Data.HeightMeters.Num(), 4);
+	TestEqual(TEXT("Cache retains every Raw16 sample"), Data.RawHeights.Num(), 4);
+	TestEqual(TEXT("Raw minimum"), Data.MinRawHeight, static_cast<uint16>(32768));
+	TestEqual(TEXT("Raw maximum"), Data.MaxRawHeight, static_cast<uint16>(32768));
 	TestEqual(TEXT("Minimum height"), Data.MinHeightMeters, 50.0f);
 	TestEqual(TEXT("Maximum height"), Data.MaxHeightMeters, 50.0f);
 	return true;

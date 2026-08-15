@@ -37,20 +37,51 @@ The height-zone tests cover:
 - deterministic saddle handling;
 - a threshold exactly on a sample and negative heights;
 - finite normalized contour coordinates;
+- inclusive range masks, reversed endpoint normalization, both boundary contours,
+  and equal range endpoints without duplicate contours;
 - 8-bit expansion, canonical UE Landscape height decoding, actor Z scale and
   translation, and cache construction.
 
 ## Scenario 21 - Height Zone
 
 1. Assign a Landscape and load the same source heightmap used to create it.
-2. Enter a height within the displayed Landscape range.
-3. Apply `Above`, then `Below`, then `Contour Only`.
-4. Verify all islands and holes, fitted-image alignment after panel resize, and
+2. Enter heights within the displayed Landscape range.
+3. Apply `Above`, then `Below`, then `Contour Only` and verify their existing behavior.
+4. Apply `Range` to `600–800`, then `800–600`; verify identical masks, the
+   distinct blue fill, and both boundary contours.
+5. Verify all islands and holes, fitted-image alignment after panel resize, and
    that hover/click markers remain above the zone.
-5. Change Flip X and Flip Y and apply again.
-6. Move or Z-scale the Landscape and apply again; verify the displayed range and
+6. Change Flip X and Flip Y and apply again.
+7. Move or Z-scale the Landscape and apply again; verify the displayed range and
    zone update.
-7. Click `Clear`; verify only the zone disappears and the entered height remains.
+8. Click `Clear`; verify only the zone disappears and both entered heights remain.
+9. With `Range` set to `100-800 m`, use a Landscape whose calculated maximum is
+   below `800 m`; verify Apply succeeds when the intervals overlap and reports
+   total pixels, selected pixels, and coverage.
+10. Click at least three heightmap points and verify Coordinate Diagnostics shows
+    Raw16, normalized height, local/world Z, calculated meters, traced surface Z,
+    surface delta, selected bounds, and Inside Range.
+
+## Scenario 22 - Multiple Height Ranges
+
+1. Assign a Landscape, load its source heightmap, and select `Range` mode.
+2. Add three non-overlapping ranges with Cyan, Green, and Magenta; include two
+   ranges that touch at one boundary.
+3. Verify the list is sorted by minimum height and every row shows its enabled
+   checkbox, color swatch, and normalized `Min - Max m` text.
+4. Verify all enabled ranges render together, pixels use exactly one range color,
+   and touching ranges do not blend at their shared boundary.
+5. Verify each range has both boundary contours and a shared contour is drawn once
+   using the upper range color.
+6. Disable and re-enable a range; verify its fill and contours disappear and return.
+7. Try an exact duplicate, an interior overlap, equal endpoints, non-finite input,
+   and a range outside the Landscape. Verify each is rejected by an explicit dialog.
+8. Verify touching ranges are accepted and range bounds entered in reverse order are
+   normalized before sorting and validation.
+9. Select a row and click `Remove`; verify the remaining overlay rebuilds. Click
+   `Clear All`; verify ranges and visualization clear without changing input values.
+10. Verify the highest enabled range includes its maximum while all other ranges use
+    `[Min, Max)` ownership.
 
 ## Scenario 1 - Basic 1009 landscape
 

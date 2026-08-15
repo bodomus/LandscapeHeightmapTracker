@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/TabManager.h"
+#include "HeightRangeGenerator.h"
 #include "HeightmapImageClickMapper.h"
 #include "HeightmapImageInfoAnalyzer.h"
 #include "HeightmapWorldHeightCache.h"
@@ -21,6 +22,7 @@
 #include "LandscapeSurfaceTraceHelper.h"
 #include "LandscapeTrackerSettings.h"
 #include "Misc/FileHelper.h"
+#include "Misc/MessageDialog.h"
 #include "Modules/ModuleManager.h"
 #include "PropertyCustomizationHelpers.h"
 #include "Rendering/DrawElements.h"
@@ -36,6 +38,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/Views/STableRow.h"
 
 #define LOCTEXT_NAMESPACE "SLandscapeHeightmapTrackerPanel"
 
@@ -146,7 +149,7 @@ public:
 						AllottedGeometry.ToPaintGeometry(),
 						DrawPoints,
 						ESlateDrawEffect::None,
-						FLinearColor(1.0f, 0.45f, 0.05f, 1.0f),
+						Contour.Color,
 						true,
 						FMath::Max(0.5f, ContourThickness.Get()));
 				}
@@ -260,9 +263,22 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 	{
 		MakeShared<EHeightZoneMode>(EHeightZoneMode::Above),
 		MakeShared<EHeightZoneMode>(EHeightZoneMode::Below),
-		MakeShared<EHeightZoneMode>(EHeightZoneMode::ContourOnly)
+		MakeShared<EHeightZoneMode>(EHeightZoneMode::ContourOnly),
+		MakeShared<EHeightZoneMode>(EHeightZoneMode::Range)
 	};
 	SelectedHeightZoneMode = HeightZoneModeOptions[0];
+	HeightRangeColorOptions =
+	{
+		MakeShared<FHeightRangeColorOption>(FHeightRangeColorOption{LOCTEXT("HeightRangeCyan", "Cyan"), FLinearColor(0.0f, 0.8f, 1.0f)}),
+		MakeShared<FHeightRangeColorOption>(FHeightRangeColorOption{LOCTEXT("HeightRangeGreen", "Green"), FLinearColor(0.1f, 0.9f, 0.2f)}),
+		MakeShared<FHeightRangeColorOption>(FHeightRangeColorOption{LOCTEXT("HeightRangeYellow", "Yellow"), FLinearColor(1.0f, 0.9f, 0.1f)}),
+		MakeShared<FHeightRangeColorOption>(FHeightRangeColorOption{LOCTEXT("HeightRangeOrange", "Orange"), FLinearColor(1.0f, 0.45f, 0.05f)}),
+		MakeShared<FHeightRangeColorOption>(FHeightRangeColorOption{LOCTEXT("HeightRangeRed", "Red"), FLinearColor(1.0f, 0.1f, 0.1f)}),
+		MakeShared<FHeightRangeColorOption>(FHeightRangeColorOption{LOCTEXT("HeightRangeBlue", "Blue"), FLinearColor(0.1f, 0.35f, 1.0f)}),
+		MakeShared<FHeightRangeColorOption>(FHeightRangeColorOption{LOCTEXT("HeightRangePurple", "Purple"), FLinearColor(0.55f, 0.2f, 0.85f)}),
+		MakeShared<FHeightRangeColorOption>(FHeightRangeColorOption{LOCTEXT("HeightRangeMagenta", "Magenta"), FLinearColor(1.0f, 0.1f, 0.75f)})
+	};
+	SelectedHeightRangeColor = HeightRangeColorOptions[0];
 
 	ClickDelegateHandle = FLandscapeHeightmapTrackerModule::OnViewportClickResult().AddSP(this, &SLandscapeHeightmapTrackerPanel::OnViewportClick);
 	HoverDelegateHandle = FLandscapeHeightmapTrackerModule::OnViewportHoverResult().AddSP(this, &SLandscapeHeightmapTrackerPanel::OnViewportHover);
@@ -410,15 +426,31 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(LOCTEXT("HeightZoneTargetLabel", "Height, m"))
+					SNew(STextBlock).Text(LOCTEXT("HeightZoneMinLabel", "Height Min, m"))
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.0f)
 				[
 					SNew(SNumericEntryBox<double>)
 						.AllowSpin(true)
 						.MinDesiredValueWidth(100.0f)
-						.Value_Lambda([this]() { return TOptional<double>(HeightZoneSettings.TargetHeightMeters); })
-						.OnValueChanged_Lambda([this](double NewValue) { HeightZoneSettings.TargetHeightMeters = NewValue; })
+						.Value_Lambda([this]() { return TOptional<double>(HeightZoneSettings.HeightAMeters); })
+						.OnValueChanged_Lambda([this](double NewValue) { HeightZoneSettings.HeightAMeters = NewValue; })
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 4.0f, 8.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(LOCTEXT("HeightZoneMaxLabel", "Height Max, m"))
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f)
+				[
+					SNew(SNumericEntryBox<double>)
+						.AllowSpin(true)
+						.MinDesiredValueWidth(100.0f)
+						.Value_Lambda([this]() { return TOptional<double>(HeightZoneSettings.HeightBMeters); })
+						.OnValueChanged_Lambda([this](double NewValue) { HeightZoneSettings.HeightBMeters = NewValue; })
 				]
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 4.0f)
@@ -436,15 +468,94 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 					})
 					.OnGenerateWidget_Lambda([](TSharedPtr<EHeightZoneMode> Mode)
 					{
-						const FText Text = !Mode.IsValid() || *Mode == EHeightZoneMode::Above
-							? LOCTEXT("HeightZoneAbove", "Above")
-							: (*Mode == EHeightZoneMode::Below
-								? LOCTEXT("HeightZoneBelow", "Below")
-								: LOCTEXT("HeightZoneContourOnly", "Contour Only"));
+						FText Text = LOCTEXT("HeightZoneAbove", "Above");
+						if (Mode.IsValid())
+						{
+							switch (*Mode)
+							{
+							case EHeightZoneMode::Below: Text = LOCTEXT("HeightZoneBelow", "Below"); break;
+							case EHeightZoneMode::ContourOnly: Text = LOCTEXT("HeightZoneContourOnly", "Contour Only"); break;
+							case EHeightZoneMode::Range: Text = LOCTEXT("HeightZoneRange", "Range"); break;
+							default: break;
+							}
+						}
 						return SNew(STextBlock).Text(Text);
 					})
 				[
 					SNew(STextBlock).Text(this, &SLandscapeHeightmapTrackerPanel::GetHeightZoneModeText)
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f, 8.0f, 4.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+				[
+					SNew(SComboBox<TSharedPtr<FHeightRangeColorOption>>)
+					.OptionsSource(&HeightRangeColorOptions)
+					.InitiallySelectedItem(SelectedHeightRangeColor)
+					.OnSelectionChanged_Lambda([this](TSharedPtr<FHeightRangeColorOption> NewColor, ESelectInfo::Type)
+					{
+						if (NewColor.IsValid())
+						{
+							SelectedHeightRangeColor = NewColor;
+						}
+					})
+					.OnGenerateWidget_Lambda([](TSharedPtr<FHeightRangeColorOption> ColorOption)
+					{
+						return SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(12.0f).HeightOverride(12.0f)
+								[
+									SNew(SBorder)
+									.BorderImage(FAppStyle::GetBrush("WhiteBrush"))
+									.BorderBackgroundColor(ColorOption.IsValid() ? ColorOption->Color : FLinearColor::Transparent)
+								]
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(ColorOption.IsValid() ? ColorOption->Name : FText::GetEmpty())
+							];
+					})
+					[
+						SNew(STextBlock).Text(this, &SLandscapeHeightmapTrackerPanel::GetSelectedHeightRangeColorText)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("AddHeightRange", "+"))
+					.ToolTipText(LOCTEXT("AddHeightRangeTooltip", "Add the current Min/Max range with the selected color."))
+					.OnClicked(this, &SLandscapeHeightmapTrackerPanel::AddHeightRange)
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f, 8.0f, 4.0f)
+			[
+				SNew(SBox).HeightOverride(112.0f)
+				[
+					SAssignNew(HeightRangeListView, SListView<TSharedPtr<int32>>)
+					.ListItemsSource(&HeightRangeListItems)
+					.SelectionMode(ESelectionMode::Single)
+					.OnGenerateRow(this, &SLandscapeHeightmapTrackerPanel::GenerateHeightRangeRow)
+					.OnSelectionChanged(this, &SLandscapeHeightmapTrackerPanel::OnHeightRangeSelectionChanged)
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f, 8.0f, 4.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("RemoveHeightRange", "Remove"))
+					.IsEnabled(this, &SLandscapeHeightmapTrackerPanel::CanRemoveSelectedHeightRange)
+					.OnClicked(this, &SLandscapeHeightmapTrackerPanel::RemoveSelectedHeightRange)
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(4.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("ClearAllHeightRanges", "Clear All"))
+					.IsEnabled_Lambda([this]() { return !HeightRanges.IsEmpty(); })
+					.OnClicked(this, &SLandscapeHeightmapTrackerPanel::ClearAllHeightRanges)
 				]
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
@@ -477,7 +588,7 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 					.HoverMarkerUV_Lambda([this]() { return HoverMarkerUV; })
 					.HasHoverMarker_Lambda([this]() { return bHasHoverMarker; })
 					.HeightZoneBrush_Lambda([this]() { return HeightZoneTexture ? &HeightZoneBrush : nullptr; })
-					.HeightContours_Lambda([this]() { return &HeightZoneResult.Contours; })
+					.HeightContours_Lambda([this]() { return GetActiveHeightContours(); })
 					.HasHeightZone_Lambda([this]() { return HeightZoneSettings.bEnabled; })
 					.ContourThickness_Lambda([this]() { return HeightZoneSettings.ContourThickness; })
 					.OnUnavailableClicked(FSimpleDelegate::CreateLambda([this]() { UpdateStatus(LOCTEXT("NoHeightmapLoadedClick", "No heightmap loaded.")); }))
@@ -556,6 +667,18 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f)
 			[
 				MakeLabelValue(LOCTEXT("Pixel", "Pixel:"), TAttribute<FText>::CreateSP(this, &SLandscapeHeightmapTrackerPanel::GetPixelText))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 4.0f, 8.0f, 0.0f)
+			[
+				SNew(STextBlock)
+				.Text(this, &SLandscapeHeightmapTrackerPanel::GetHeightRangeDiagnosticsText)
+				.AutoWrapText(true)
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 4.0f, 8.0f, 0.0f)
+			[
+				SNew(STextBlock)
+				.Text(this, &SLandscapeHeightmapTrackerPanel::GetHeightSampleDiagnosticsText)
+				.AutoWrapText(true)
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f)
 			[
@@ -676,6 +799,350 @@ FReply SLandscapeHeightmapTrackerPanel::ClearMarker()
 	return FReply::Handled();
 }
 
+FReply SLandscapeHeightmapTrackerPanel::AddHeightRange()
+{
+	if (!FMath::IsFinite(HeightZoneSettings.HeightAMeters) ||
+		!FMath::IsFinite(HeightZoneSettings.HeightBMeters) ||
+		!SelectedHeightRangeColor.IsValid())
+	{
+		FMessageDialog::Open(
+			EAppMsgType::Ok,
+			LOCTEXT("InvalidHeightRangeDialog", "Invalid Height Range\n\nEnter two finite heights and select a color."));
+		return FReply::Handled();
+	}
+
+	FHeightRangeDefinition Candidate;
+	Candidate.MinHeightMeters = HeightZoneSettings.HeightAMeters;
+	Candidate.MaxHeightMeters = HeightZoneSettings.HeightBMeters;
+	Candidate.Color = SelectedHeightRangeColor->Color;
+	Candidate.bEnabled = true;
+	Candidate = FHeightRangeGenerator::Normalize(Candidate);
+	if (FMath::IsNearlyEqual(Candidate.MinHeightMeters, Candidate.MaxHeightMeters))
+	{
+		FMessageDialog::Open(
+			EAppMsgType::Ok,
+			LOCTEXT("ZeroWidthHeightRangeDialog", "Invalid Height Range\n\nMin and Max must be different."));
+		return FReply::Handled();
+	}
+
+	FString Error;
+	if (!EnsureHeightMetersCache(Error))
+	{
+		FMessageDialog::Open(
+			EAppMsgType::Ok,
+			FText::Format(
+				LOCTEXT("HeightRangeCacheDialog", "Invalid Height Range\n\nHeight data could not be prepared: {0}"),
+				FText::FromString(Error)));
+		return FReply::Handled();
+	}
+	if (!FHeightZoneGenerator::DoesRangeOverlap(
+		Candidate.MinHeightMeters,
+		Candidate.MaxHeightMeters,
+		MinHeightMeters,
+		MaxHeightMeters))
+	{
+		FMessageDialog::Open(
+			EAppMsgType::Ok,
+			FText::Format(
+				LOCTEXT(
+					"HeightRangeLandscapeDialog",
+					"Invalid Height Range\n\nThe range {0} - {1} m does not overlap the Landscape range {2} - {3} m."),
+				FText::AsNumber(Candidate.MinHeightMeters),
+				FText::AsNumber(Candidate.MaxHeightMeters),
+				FText::AsNumber(MinHeightMeters),
+				FText::AsNumber(MaxHeightMeters)));
+		return FReply::Handled();
+	}
+
+	const FHeightRangeValidationResult Conflict = FHeightRangeGenerator::FindConflict(Candidate, HeightRanges);
+	if (Conflict.Conflict != EHeightRangeConflict::None && HeightRanges.IsValidIndex(Conflict.ExistingRangeIndex))
+	{
+		const FHeightRangeDefinition Existing = FHeightRangeGenerator::Normalize(HeightRanges[Conflict.ExistingRangeIndex]);
+		const FText Message = FText::Format(
+			Conflict.Conflict == EHeightRangeConflict::Duplicate
+				? LOCTEXT(
+					"DuplicateHeightRangeDialog",
+					"Duplicate Height Range\n\nThe range {0} - {1} m already exists.")
+				: LOCTEXT(
+					"OverlapHeightRangeDialog",
+					"Height Range Overlap\n\nThe range {0} - {1} m overlaps the existing range {2} - {3} m. Touching boundaries are allowed, but shared interior heights are not."),
+			FText::AsNumber(Candidate.MinHeightMeters),
+			FText::AsNumber(Candidate.MaxHeightMeters),
+			FText::AsNumber(Existing.MinHeightMeters),
+			FText::AsNumber(Existing.MaxHeightMeters));
+		FMessageDialog::Open(EAppMsgType::Ok, Message);
+		return FReply::Handled();
+	}
+
+	HeightRanges.Add(Candidate);
+	FHeightRangeGenerator::NormalizeAndSort(HeightRanges);
+	RefreshHeightRangeListItems();
+	if (!RebuildMultiHeightRangeVisualization(Error))
+	{
+		UpdateStatus(FText::Format(
+			LOCTEXT("MultiHeightRangeRebuildFailed", "The range was added, but the overlay could not be rebuilt: {0}"),
+			FText::FromString(Error)));
+	}
+	return FReply::Handled();
+}
+
+FReply SLandscapeHeightmapTrackerPanel::RemoveSelectedHeightRange()
+{
+	if (!CanRemoveSelectedHeightRange())
+	{
+		return FReply::Handled();
+	}
+
+	HeightRanges.RemoveAt(*SelectedHeightRangeItem);
+	SelectedHeightRangeItem.Reset();
+	RefreshHeightRangeListItems();
+	if (HeightRanges.IsEmpty())
+	{
+		ClearHeightZoneVisualization();
+		UpdateStatus(LOCTEXT("LastHeightRangeRemoved", "All height ranges removed."));
+	}
+	else
+	{
+		FString Error;
+		if (!RebuildMultiHeightRangeVisualization(Error))
+		{
+			UpdateStatus(FText::Format(
+				LOCTEXT("HeightRangeRemoveRebuildFailed", "The range was removed, but the overlay could not be rebuilt: {0}"),
+				FText::FromString(Error)));
+		}
+	}
+	return FReply::Handled();
+}
+
+FReply SLandscapeHeightmapTrackerPanel::ClearAllHeightRanges()
+{
+	HeightRanges.Reset();
+	SelectedHeightRangeItem.Reset();
+	RefreshHeightRangeListItems();
+	ClearHeightZoneVisualization();
+	UpdateStatus(LOCTEXT("AllHeightRangesCleared", "All height ranges cleared."));
+	return FReply::Handled();
+}
+
+TSharedRef<ITableRow> SLandscapeHeightmapTrackerPanel::GenerateHeightRangeRow(
+	TSharedPtr<int32> Item,
+	const TSharedRef<STableViewBase>& OwnerTable)
+{
+	const int32 RangeIndex = Item.IsValid() ? *Item : INDEX_NONE;
+	return SNew(STableRow<TSharedPtr<int32>>, OwnerTable)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(3.0f)
+		[
+			SNew(SCheckBox)
+			.IsChecked_Lambda([this, RangeIndex]()
+			{
+				return HeightRanges.IsValidIndex(RangeIndex) && HeightRanges[RangeIndex].bEnabled
+					? ECheckBoxState::Checked
+					: ECheckBoxState::Unchecked;
+			})
+			.OnCheckStateChanged_Lambda([this, RangeIndex](ECheckBoxState State)
+			{
+				SetHeightRangeEnabled(RangeIndex, State);
+			})
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(3.0f)
+		[
+			SNew(SBox).WidthOverride(14.0f).HeightOverride(14.0f)
+			[
+				SNew(SBorder)
+				.BorderImage(FAppStyle::GetBrush("WhiteBrush"))
+				.BorderBackgroundColor_Lambda([this, RangeIndex]()
+				{
+					return HeightRanges.IsValidIndex(RangeIndex)
+						? HeightRanges[RangeIndex].Color
+						: FLinearColor::Transparent;
+				})
+			]
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(3.0f)
+		[
+			SNew(STextBlock)
+			.Text_Lambda([this, RangeIndex]()
+			{
+				if (!HeightRanges.IsValidIndex(RangeIndex))
+				{
+					return FText::GetEmpty();
+				}
+				return FText::Format(
+					LOCTEXT("HeightRangeRow", "{0} - {1} m"),
+					FText::AsNumber(HeightRanges[RangeIndex].MinHeightMeters),
+					FText::AsNumber(HeightRanges[RangeIndex].MaxHeightMeters));
+			})
+		]
+	];
+}
+
+void SLandscapeHeightmapTrackerPanel::OnHeightRangeSelectionChanged(
+	TSharedPtr<int32> Item,
+	ESelectInfo::Type SelectInfo)
+{
+	SelectedHeightRangeItem = Item;
+}
+
+void SLandscapeHeightmapTrackerPanel::SetHeightRangeEnabled(int32 RangeIndex, ECheckBoxState NewState)
+{
+	if (!HeightRanges.IsValidIndex(RangeIndex))
+	{
+		return;
+	}
+	HeightRanges[RangeIndex].bEnabled = NewState == ECheckBoxState::Checked;
+	FString Error;
+	if (!RebuildMultiHeightRangeVisualization(Error))
+	{
+		UpdateStatus(FText::Format(
+			LOCTEXT("HeightRangeToggleRebuildFailed", "The range was updated, but the overlay could not be rebuilt: {0}"),
+			FText::FromString(Error)));
+	}
+}
+
+void SLandscapeHeightmapTrackerPanel::RefreshHeightRangeListItems()
+{
+	HeightRangeListItems.Reset();
+	for (int32 Index = 0; Index < HeightRanges.Num(); ++Index)
+	{
+		HeightRangeListItems.Add(MakeShared<int32>(Index));
+	}
+	if (HeightRangeListView.IsValid())
+	{
+		HeightRangeListView->RequestListRefresh();
+	}
+}
+
+bool SLandscapeHeightmapTrackerPanel::RebuildMultiHeightRangeVisualization(FString& OutError)
+{
+	if (HeightRanges.IsEmpty())
+	{
+		ClearHeightZoneVisualization();
+		return true;
+	}
+	HeightZoneSettings.Mode = EHeightZoneMode::Range;
+	for (const TSharedPtr<EHeightZoneMode>& ModeOption : HeightZoneModeOptions)
+	{
+		if (ModeOption.IsValid() && *ModeOption == EHeightZoneMode::Range)
+		{
+			SelectedHeightZoneMode = ModeOption;
+			break;
+		}
+	}
+	if (!EnsureHeightMetersCache(OutError))
+	{
+		return false;
+	}
+
+	MultiHeightRangeResult = FHeightRangeGenerator::Generate(
+		HeightMetersCache,
+		ImageSize.X,
+		ImageSize.Y,
+		HeightRanges);
+	if (MultiHeightRangeResult.RangeIndexByPixel.Num() != ImageSize.X * ImageSize.Y)
+	{
+		OutError = TEXT("multi-range dimensions do not match the heightmap.");
+		return false;
+	}
+
+	bUsingMultiRangeVisualization = true;
+	if (!UpdateHeightZoneTexture(OutError))
+	{
+		return false;
+	}
+	HeightZoneSettings.bEnabled = true;
+	InvalidateHeightmapMarkerPaint();
+
+	int32 SelectedPixels = 0;
+	for (const int32 Count : MultiHeightRangeResult.PixelCounts)
+	{
+		SelectedPixels += Count;
+	}
+	UpdateStatus(FText::Format(
+		LOCTEXT("MultiHeightRangesApplied", "Height ranges: {0}; selected pixels: {1}; contours: {2}."),
+		FText::AsNumber(HeightRanges.Num()),
+		FText::AsNumber(SelectedPixels),
+		FText::AsNumber(MultiHeightRangeResult.Contours.Num())));
+	return true;
+}
+
+bool SLandscapeHeightmapTrackerPanel::CanRemoveSelectedHeightRange() const
+{
+	return SelectedHeightRangeItem.IsValid() && HeightRanges.IsValidIndex(*SelectedHeightRangeItem);
+}
+
+#if WITH_DEV_AUTOMATION_TESTS
+bool SLandscapeHeightmapTrackerPanel::ConfigureMultiHeightRangePreviewForTesting(
+	const TArray<float>& HeightMeters,
+	int32 Width,
+	int32 Height,
+	const TArray<FHeightRangeDefinition>& Ranges,
+	FString& OutError)
+{
+	if (Width < 2 || Height < 2 || HeightMeters.Num() != Width * Height)
+	{
+		OutError = TEXT("preview dimensions are invalid.");
+		return false;
+	}
+
+	ReleaseTexture();
+	ImageSize = FIntPoint(Width, Height);
+	HeightmapTexture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
+	if (!HeightmapTexture)
+	{
+		OutError = TEXT("preview heightmap texture allocation failed.");
+		return false;
+	}
+
+	TArray<FColor> PreviewPixels;
+	PreviewPixels.SetNumUninitialized(HeightMeters.Num());
+	float MinHeight = HeightMeters[0];
+	float MaxHeight = HeightMeters[0];
+	for (const float HeightValue : HeightMeters)
+	{
+		MinHeight = FMath::Min(MinHeight, HeightValue);
+		MaxHeight = FMath::Max(MaxHeight, HeightValue);
+	}
+	for (int32 Index = 0; Index < HeightMeters.Num(); ++Index)
+	{
+		const float Normalized = MaxHeight > MinHeight
+			? FMath::Clamp((HeightMeters[Index] - MinHeight) / (MaxHeight - MinHeight), 0.0f, 1.0f)
+			: 0.0f;
+		const uint8 Gray = static_cast<uint8>(FMath::RoundToInt(FMath::Lerp(24.0f, 230.0f, Normalized)));
+		PreviewPixels[Index] = FColor(Gray, Gray, Gray, 255);
+	}
+	HeightmapTexture->AddToRoot();
+	HeightmapTexture->SRGB = false;
+	void* TextureData = HeightmapTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+	FMemory::Memcpy(TextureData, PreviewPixels.GetData(), PreviewPixels.Num() * sizeof(FColor));
+	HeightmapTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
+	HeightmapTexture->UpdateResource();
+	HeightmapBrush.SetResourceObject(HeightmapTexture);
+	HeightmapBrush.SetImageSize(FVector2D(Width, Height));
+
+	HeightRanges = Ranges;
+	FHeightRangeGenerator::NormalizeAndSort(HeightRanges);
+	if (!HeightRanges.IsEmpty())
+	{
+		HeightZoneSettings.HeightAMeters = HeightRanges[0].MinHeightMeters;
+		HeightZoneSettings.HeightBMeters = HeightRanges[0].MaxHeightMeters;
+	}
+	ImagePath = TEXT("Synthetic UE5-17 preview");
+	ImageFormat = TEXT("PNG");
+	ImageBitDepth = 16;
+	bHasHeightmapImageInfo = true;
+	bSourceImageIsGrayscale = true;
+	RefreshHeightRangeListItems();
+	MultiHeightRangeResult = FHeightRangeGenerator::Generate(HeightMeters, Width, Height, HeightRanges);
+	bUsingMultiRangeVisualization = true;
+	HeightZoneSettings.bEnabled = true;
+	HeightZoneSettings.Mode = EHeightZoneMode::Range;
+	UpdateStatus(LOCTEXT("MultiHeightRangePreviewStatus", "Synthetic UE5-17 preview with three enabled ranges."));
+	return UpdateHeightZoneTexture(OutError);
+}
+#endif
+
 FReply SLandscapeHeightmapTrackerPanel::ApplyHeightZone()
 {
 	if (!AssignedLandscape.IsValid())
@@ -688,7 +1155,20 @@ FReply SLandscapeHeightmapTrackerPanel::ApplyHeightZone()
 		UpdateStatus(LOCTEXT("HeightZoneNoHeightmap", "Height zone requires a loaded heightmap."));
 		return FReply::Handled();
 	}
-	if (!FMath::IsFinite(HeightZoneSettings.TargetHeightMeters))
+	const bool bRangeMode = HeightZoneSettings.Mode == EHeightZoneMode::Range;
+	if (bRangeMode && !HeightRanges.IsEmpty())
+	{
+		FString Error;
+		if (!RebuildMultiHeightRangeVisualization(Error))
+		{
+			UpdateStatus(FText::Format(
+				LOCTEXT("MultiHeightRangeApplyFailed", "Height ranges could not be applied: {0}"),
+				FText::FromString(Error)));
+		}
+		return FReply::Handled();
+	}
+	if (!FMath::IsFinite(HeightZoneSettings.HeightAMeters) ||
+		(bRangeMode && !FMath::IsFinite(HeightZoneSettings.HeightBMeters)))
 	{
 		UpdateStatus(LOCTEXT("HeightZoneInvalidTarget", "Enter a valid finite height."));
 		return FReply::Handled();
@@ -703,23 +1183,38 @@ FReply SLandscapeHeightmapTrackerPanel::ApplyHeightZone()
 		return FReply::Handled();
 	}
 
-	if (HeightZoneSettings.TargetHeightMeters < MinHeightMeters ||
-		HeightZoneSettings.TargetHeightMeters > MaxHeightMeters)
+	const double SelectedMinHeight = bRangeMode
+		? FMath::Min(HeightZoneSettings.HeightAMeters, HeightZoneSettings.HeightBMeters)
+		: HeightZoneSettings.HeightAMeters;
+	const double SelectedMaxHeight = bRangeMode
+		? FMath::Max(HeightZoneSettings.HeightAMeters, HeightZoneSettings.HeightBMeters)
+		: HeightZoneSettings.HeightAMeters;
+	const bool bSelectionOutsideAvailableRange = bRangeMode
+		? !FHeightZoneGenerator::DoesRangeOverlap(
+			SelectedMinHeight,
+			SelectedMaxHeight,
+			MinHeightMeters,
+			MaxHeightMeters)
+		: SelectedMinHeight < MinHeightMeters || SelectedMaxHeight > MaxHeightMeters;
+	if (bSelectionOutsideAvailableRange)
 	{
 		UpdateStatus(FText::Format(
 			LOCTEXT(
 				"HeightZoneOutsideRange",
-				"The selected height is outside the Landscape range. Landscape range: {0} m - {1} m."),
+				"The selected height does not overlap the Landscape range. Landscape range: {0} m - {1} m."),
 			FText::AsNumber(MinHeightMeters),
 			FText::AsNumber(MaxHeightMeters)));
 		return FReply::Handled();
 	}
 
+	bUsingMultiRangeVisualization = false;
+	MultiHeightRangeResult = FMultiHeightRangeResult();
 	HeightZoneResult = FHeightZoneGenerator::Generate(
 		HeightMetersCache,
 		ImageSize.X,
 		ImageSize.Y,
-		HeightZoneSettings.TargetHeightMeters,
+		HeightZoneSettings.HeightAMeters,
+		HeightZoneSettings.HeightBMeters,
 		HeightZoneSettings.Mode);
 	if (HeightZoneResult.Mask.Num() != ImageSize.X * ImageSize.Y)
 	{
@@ -738,11 +1233,47 @@ FReply SLandscapeHeightmapTrackerPanel::ApplyHeightZone()
 
 	HeightZoneSettings.bEnabled = true;
 	InvalidateHeightmapMarkerPaint();
-	UpdateStatus(FText::Format(
-		LOCTEXT("HeightZoneApplied", "Height zone applied. Range: {0} m - {1} m; contours: {2}."),
-		FText::AsNumber(MinHeightMeters),
-		FText::AsNumber(MaxHeightMeters),
-		FText::AsNumber(HeightZoneResult.Contours.Num())));
+	int32 PixelsInsideRange = 0;
+	for (const uint8 MaskValue : HeightZoneResult.Mask)
+	{
+		PixelsInsideRange += MaskValue != 0 ? 1 : 0;
+	}
+	const int32 TotalPixels = HeightZoneResult.Mask.Num();
+	const double CoveragePercent = TotalPixels > 0
+		? 100.0 * PixelsInsideRange / TotalPixels
+		: 0.0;
+	if (bRangeMode)
+	{
+		FNumberFormattingOptions CoverageFormat;
+		CoverageFormat.SetMaximumFractionalDigits(2);
+		CoverageFormat.SetMinimumFractionalDigits(2);
+		UpdateStatus(FText::Format(
+			LOCTEXT(
+				"HeightZoneRangeApplied",
+				"Range: {0} - {1} m\nTotal pixels: {2}\nPixels inside range: {3}\nCoverage: {4}%\nContours: {5}"),
+			FText::AsNumber(HeightZoneResult.MinHeightMeters),
+			FText::AsNumber(HeightZoneResult.MaxHeightMeters),
+			FText::AsNumber(TotalPixels),
+			FText::AsNumber(PixelsInsideRange),
+			FText::AsNumber(CoveragePercent, &CoverageFormat),
+			FText::AsNumber(HeightZoneResult.Contours.Num())));
+	}
+	else
+	{
+		UpdateStatus(FText::Format(
+			LOCTEXT("HeightZoneApplied", "Height zone applied at {0} m; contours: {1}."),
+			FText::AsNumber(HeightZoneResult.MinHeightMeters),
+			FText::AsNumber(HeightZoneResult.Contours.Num())));
+	}
+	UE_LOG(
+		LogLandscapeHeightmapTrackerPanel,
+		Log,
+		TEXT("Height Zone applied. Range: %.2f - %.2f m. Total pixels: %d. Pixels inside range: %d. Coverage: %.2f%%."),
+		HeightZoneResult.MinHeightMeters,
+		HeightZoneResult.MaxHeightMeters,
+		TotalPixels,
+		PixelsInsideRange,
+		CoveragePercent);
 	return FReply::Handled();
 }
 
@@ -799,6 +1330,7 @@ void SLandscapeHeightmapTrackerPanel::OnViewportClick(const FLandscapeHeightmapT
 			InvalidateHeightmapMarkerPaint();
 		}
 		UpdateStatus(LOCTEXT("MappedClick", "Landscape click mapped to heightmap."));
+		LogHeightSampleDiagnostics();
 		UE_LOG(LogLandscapeHeightmapTrackerPanel, Log, TEXT("Valid click mapped to U=%f V=%f Pixel=(%d,%d)."), LastMapping.NormalizedUV.X, LastMapping.NormalizedUV.Y, LastMapping.Pixel.X, LastMapping.Pixel.Y);
 	}
 	else
@@ -917,6 +1449,7 @@ void SLandscapeHeightmapTrackerPanel::OnHeightmapClicked(FVector2D DisplayUV)
 
 	FLandscapeHeightmapTrackerModule::SetReverseMarker(SurfaceTrace.WorldPosition, AssignedLandscape.Get());
 	UpdateStatus(LOCTEXT("MappedHeightmapClick", "Heightmap click mapped to Landscape surface."));
+	LogHeightSampleDiagnostics();
 
 	UE_LOG(
 		LogLandscapeHeightmapTrackerPanel,
@@ -1189,7 +1722,10 @@ bool SLandscapeHeightmapTrackerPanel::EnsureHeightMetersCache(FString& OutError)
 		return false;
 	}
 
+	HeightRawValueCache = MoveTemp(Data.RawHeights);
 	HeightMetersCache = MoveTemp(Data.HeightMeters);
+	MinRawHeight = Data.MinRawHeight;
+	MaxRawHeight = Data.MaxRawHeight;
 	MinHeightMeters = Data.MinHeightMeters;
 	MaxHeightMeters = Data.MaxHeightMeters;
 	CachedLandscapeTransform = CurrentTransform;
@@ -1199,33 +1735,69 @@ bool SLandscapeHeightmapTrackerPanel::EnsureHeightMetersCache(FString& OutError)
 	bCachedFlipX = bFlipX;
 	bCachedFlipY = bFlipY;
 	bHeightMetersCacheValid = true;
+	UE_LOG(
+		LogLandscapeHeightmapTrackerPanel,
+		Log,
+		TEXT("Heightmap raw range: min=%u max=%u. Calculated Landscape height range: min=%.3f m max=%.3f m."),
+		MinRawHeight,
+		MaxRawHeight,
+		MinHeightMeters,
+		MaxHeightMeters);
 	return true;
 }
 
 bool SLandscapeHeightmapTrackerPanel::UpdateHeightZoneTexture(FString& OutError)
 {
 	ReleaseHeightZoneTexture();
-	if (HeightZoneSettings.Mode == EHeightZoneMode::ContourOnly)
+	if (!bUsingMultiRangeVisualization && HeightZoneSettings.Mode == EHeightZoneMode::ContourOnly)
 	{
 		return true;
 	}
-	if (HeightZoneResult.Mask.Num() != ImageSize.X * ImageSize.Y)
+	const int32 ExpectedPixelCount = ImageSize.X * ImageSize.Y;
+	if (bUsingMultiRangeVisualization)
+	{
+		if (MultiHeightRangeResult.RangeIndexByPixel.Num() != ExpectedPixelCount)
+		{
+			OutError = TEXT("multi-range dimensions do not match the heightmap.");
+			return false;
+		}
+	}
+	else if (HeightZoneResult.Mask.Num() != ExpectedPixelCount)
 	{
 		OutError = TEXT("mask dimensions do not match the heightmap.");
 		return false;
 	}
 
 	TArray<FColor> OverlayPixels;
-	OverlayPixels.SetNumUninitialized(HeightZoneResult.Mask.Num());
+	OverlayPixels.SetNumUninitialized(ExpectedPixelCount);
 	const uint8 Alpha = static_cast<uint8>(FMath::Clamp(
 		FMath::RoundToInt(HeightZoneSettings.FillOpacity * 255.0f),
 		0,
 		255));
-	for (int32 Index = 0; Index < HeightZoneResult.Mask.Num(); ++Index)
+	for (int32 Index = 0; Index < ExpectedPixelCount; ++Index)
 	{
-		OverlayPixels[Index] = HeightZoneResult.Mask[Index] != 0
-			? FColor(255, 96, 0, Alpha)
-			: FColor(0, 0, 0, 0);
+		if (bUsingMultiRangeVisualization)
+		{
+			const int32 RangeIndex = MultiHeightRangeResult.RangeIndexByPixel[Index];
+			if (MultiHeightRangeResult.Ranges.IsValidIndex(RangeIndex))
+			{
+				FLinearColor RangeColor = MultiHeightRangeResult.Ranges[RangeIndex].Color;
+				RangeColor.A = Alpha / 255.0f;
+				OverlayPixels[Index] = RangeColor.ToFColor(false);
+			}
+			else
+			{
+				OverlayPixels[Index] = FColor(0, 0, 0, 0);
+			}
+		}
+		else
+		{
+			OverlayPixels[Index] = HeightZoneResult.Mask[Index] != 0
+				? (HeightZoneSettings.Mode == EHeightZoneMode::Range
+					? FColor(0, 180, 255, Alpha)
+					: FColor(255, 96, 0, Alpha))
+				: FColor(0, 0, 0, 0);
+		}
 	}
 
 	HeightZoneTexture = UTexture2D::CreateTransient(ImageSize.X, ImageSize.Y, PF_B8G8R8A8);
@@ -1249,7 +1821,10 @@ bool SLandscapeHeightmapTrackerPanel::UpdateHeightZoneTexture(FString& OutError)
 void SLandscapeHeightmapTrackerPanel::InvalidateHeightMetersCache()
 {
 	bHeightMetersCacheValid = false;
+	HeightRawValueCache.Reset();
 	HeightMetersCache.Reset();
+	MinRawHeight = 0;
+	MaxRawHeight = 0;
 	MinHeightMeters = 0.0f;
 	MaxHeightMeters = 0.0f;
 	CachedHeightImageSize = FIntPoint::ZeroValue;
@@ -1260,6 +1835,8 @@ void SLandscapeHeightmapTrackerPanel::ClearHeightZoneVisualization()
 {
 	HeightZoneSettings.bEnabled = false;
 	HeightZoneResult = FHeightZoneResult();
+	MultiHeightRangeResult = FMultiHeightRangeResult();
+	bUsingMultiRangeVisualization = false;
 	ReleaseHeightZoneTexture();
 	InvalidateHeightmapMarkerPaint();
 }
@@ -1308,6 +1885,15 @@ void SLandscapeHeightmapTrackerPanel::InvalidateHeightmapMarkerPaint()
 	}
 
 	Invalidate(EInvalidateWidgetReason::Paint);
+}
+
+void SLandscapeHeightmapTrackerPanel::LogHeightSampleDiagnostics() const
+{
+	const FText Diagnostics = GetHeightSampleDiagnosticsText();
+	if (!Diagnostics.IsEmpty())
+	{
+		UE_LOG(LogLandscapeHeightmapTrackerPanel, Log, TEXT("Height sample diagnostics:\n%s"), *Diagnostics.ToString());
+	}
 }
 
 void SLandscapeHeightmapTrackerPanel::UpdateStatus(const FText& InStatus)
@@ -1390,6 +1976,59 @@ FText SLandscapeHeightmapTrackerPanel::GetUvText() const
 	return FText::Format(LOCTEXT("UvFormat", "U={0} V={1}"), FText::AsNumber(LastMapping.NormalizedUV.X), FText::AsNumber(LastMapping.NormalizedUV.Y));
 }
 FText SLandscapeHeightmapTrackerPanel::GetPixelText() const { return LastMapping.bIsValid ? FText::Format(LOCTEXT("PixelFormat", "X={0} Y={1}"), FText::AsNumber(LastMapping.Pixel.X), FText::AsNumber(LastMapping.Pixel.Y)) : FText::GetEmpty(); }
+FText SLandscapeHeightmapTrackerPanel::GetHeightRangeDiagnosticsText() const
+{
+	if (!bHeightMetersCacheValid)
+	{
+		return LOCTEXT("NoHeightRangeDiagnostics", "Height ranges: unavailable");
+	}
+
+	return FText::FromString(FString::Printf(
+		TEXT("Heightmap raw range: %u - %u\nCalculated Landscape height range: %.3f - %.3f m"),
+		MinRawHeight,
+		MaxRawHeight,
+		MinHeightMeters,
+		MaxHeightMeters));
+}
+
+FText SLandscapeHeightmapTrackerPanel::GetHeightSampleDiagnosticsText() const
+{
+	if (!LastMapping.bIsValid || !bHeightMetersCacheValid || ImageSize.X <= 0 || ImageSize.Y <= 0)
+	{
+		return FText::GetEmpty();
+	}
+
+	const FIntPoint Pixel(
+		FMath::Clamp(LastMapping.Pixel.X, 0, ImageSize.X - 1),
+		FMath::Clamp(LastMapping.Pixel.Y, 0, ImageSize.Y - 1));
+	const int32 Index = Pixel.X + Pixel.Y * ImageSize.X;
+	if (!HeightRawValueCache.IsValidIndex(Index) || !HeightMetersCache.IsValidIndex(Index))
+	{
+		return LOCTEXT("InvalidHeightSampleDiagnostics", "Height sample: unavailable");
+	}
+
+	const uint16 RawHeight = HeightRawValueCache[Index];
+	const double HeightMeters = HeightMetersCache[Index];
+	const double LocalZ = FHeightmapWorldHeightCache::LandscapeHeightToLocalZ(RawHeight);
+	const double CalculatedWorldZ = HeightMeters * 100.0;
+	const double SurfaceWorldZ = LastMapping.WorldPosition.Z;
+	const double Low = FMath::Min(HeightZoneSettings.HeightAMeters, HeightZoneSettings.HeightBMeters);
+	const double High = FMath::Max(HeightZoneSettings.HeightAMeters, HeightZoneSettings.HeightBMeters);
+	const bool bInsideRange = HeightMeters >= Low && HeightMeters <= High;
+
+	return FText::FromString(FString::Printf(
+		TEXT("Raw Heightmap Value: %u\nNormalized Height: %.6f\nLandscape Local Z, cm: %.3f\nLandscape World Z, cm: %.3f\nHeight, m: %.3f\nLandscape Surface Z, cm: %.3f\nSurface delta, cm: %.3f\nRange Min: %.3f\nRange Max: %.3f\nInside Range: %s"),
+		RawHeight,
+		FHeightmapWorldHeightCache::NormalizeLandscapeHeight(RawHeight),
+		LocalZ,
+		CalculatedWorldZ,
+		HeightMeters,
+		SurfaceWorldZ,
+		SurfaceWorldZ - CalculatedWorldZ,
+		Low,
+		High,
+		bInsideRange ? TEXT("YES") : TEXT("NO")));
+}
 FText SLandscapeHeightmapTrackerPanel::GetStatusText() const { return StatusText; }
 FText SLandscapeHeightmapTrackerPanel::GetHeightZoneModeText() const
 {
@@ -1399,9 +2038,25 @@ FText SLandscapeHeightmapTrackerPanel::GetHeightZoneModeText() const
 		return LOCTEXT("HeightZoneBelow", "Below");
 	case EHeightZoneMode::ContourOnly:
 		return LOCTEXT("HeightZoneContourOnly", "Contour Only");
+	case EHeightZoneMode::Range:
+		return LOCTEXT("HeightZoneRange", "Range");
 	default:
 		return LOCTEXT("HeightZoneAbove", "Above");
 	}
+}
+
+FText SLandscapeHeightmapTrackerPanel::GetSelectedHeightRangeColorText() const
+{
+	return SelectedHeightRangeColor.IsValid()
+		? SelectedHeightRangeColor->Name
+		: LOCTEXT("NoHeightRangeColor", "Select Color");
+}
+
+const TArray<FHeightContour>* SLandscapeHeightmapTrackerPanel::GetActiveHeightContours() const
+{
+	return bUsingMultiRangeVisualization
+		? &MultiHeightRangeResult.Contours
+		: &HeightZoneResult.Contours;
 }
 
 #undef LOCTEXT_NAMESPACE
