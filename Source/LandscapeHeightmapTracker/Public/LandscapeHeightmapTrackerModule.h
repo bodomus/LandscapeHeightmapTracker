@@ -47,8 +47,14 @@ public:
 private:
 	void RegisterMenus();
 	void PluginButtonClicked();
+	void ExecuteRefreshContent();
+	void ExecuteRefreshCurrentFolder();
+	void RefreshContentPath(const FString& VirtualPath);
+	bool CanExecuteRefreshContent() const;
+	bool CanExecuteRefreshCurrentFolder() const;
 	TSharedRef<class SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
 	TSharedRef<class SDockTab> OnSpawnPaintLayersTab(const class FSpawnTabArgs& SpawnTabArgs);
 
 	TSharedPtr<class FUICommandList> PluginCommands;
+	bool bIsRefreshingContent = false;
 };

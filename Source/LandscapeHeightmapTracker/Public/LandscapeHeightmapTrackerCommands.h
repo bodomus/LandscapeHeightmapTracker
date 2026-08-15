@@ -12,4 +12,6 @@ public:
 	virtual void RegisterCommands() override;
 
 	TSharedPtr<FUICommandInfo> OpenPluginWindow;
+	TSharedPtr<FUICommandInfo> RefreshContent;
+	TSharedPtr<FUICommandInfo> RefreshCurrentFolder;
 };

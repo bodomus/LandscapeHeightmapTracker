@@ -11,6 +11,7 @@ LandscapeHeightmapTracker.ReverseMapping.*
 LandscapeHeightmapTracker.HeightZone.*
 LandscapeHeightmapTracker.PaintLayers.*
 LandscapeHeightmapTracker.UI.*
+LandscapeHeightmapTracker.RefreshContent.*
 ```
 
 The mapper tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
@@ -41,6 +42,38 @@ The height-zone tests cover:
   and equal range endpoints without duplicate contours;
 - 8-bit expansion, canonical UE Landscape height decoding, actor Z scale and
   translation, and cache construction.
+
+The Refresh Content tests cover the strict project-content path policy and verify
+that both refresh commands are registered. Actual filesystem discovery remains an
+editor integration scenario because it requires a running Content Browser and
+compatible test packages.
+
+## Scenario 23 - Refresh Content
+
+1. Start UE 5.7 with the test project and confirm a known compatible test asset is absent.
+2. While the editor remains open, externally copy the asset into
+   `<Project>/Content/RefreshContentTest/`.
+3. Run `Tools -> Landscape Heightmap Tracker -> Refresh Content`.
+4. Verify the completion notification appears and the Output Log records `/Game`
+   plus elapsed time.
+5. Verify the new folder and asset appear in Content Browser and the asset can be selected.
+6. Repeat with a compatible `.umap` and verify the map is discovered.
+7. Copy several assets into nested new folders and verify one refresh discovers them.
+8. Trigger Refresh repeatedly and verify overlapping scans cannot start and both
+   commands are enabled again after completion.
+
+## Scenario 24 - Refresh Current Folder and safety
+
+1. Navigate the primary Content Browser to `/Game/RefreshContentTest`.
+2. Externally copy another compatible package below that folder.
+3. Run `Refresh Current Folder` and verify the new package appears.
+4. Navigate to `/Engine` or a plugin content root and verify `Refresh Current Folder`
+   is unavailable.
+5. Place an unsupported file in the test folder and verify the command completes
+   without importing or modifying it.
+6. Test a deliberately incompatible/corrupt disposable package and verify no crash;
+   technical details should be in the Output Log and no repair should be attempted.
+7. Verify no packages are saved, renamed, moved, deleted, or resaved by either command.
 
 ## Scenario 21 - Height Zone
 
