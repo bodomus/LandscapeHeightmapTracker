@@ -14,10 +14,19 @@
 #include "LandscapeHeightmapTrackerEdMode.h"
 #include "LandscapeHeightmapTrackerStyle.h"
 #include "LevelEditor.h"
+#include "ScanVault/ScanVaultImporter.h"
+#include "ScanVault/ScanVaultManifestReader.h"
+#include "ScanVault/SScanVaultImportWindow.h"
 #include "SLandscapePaintLayerBulkRemoveWidget.h"
 #include "SLandscapeHeightmapTrackerPanel.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Framework/Application/SlateApplication.h"
+#include "HAL/PlatformApplicationMisc.h"
+#include "IDesktopPlatform.h"
+#include "DesktopPlatformModule.h"
+#include "Misc/FileHelper.h"
+#include "Misc/MessageDialog.h"
 #include "ToolMenus.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/Notifications/SNotificationList.h"
@@ -232,6 +241,10 @@ void FLandscapeHeightmapTrackerModule::StartupModule()
 		FLandscapeHeightmapTrackerCommands::Get().RefreshCurrentFolder,
 		FExecuteAction::CreateRaw(this, &FLandscapeHeightmapTrackerModule::ExecuteRefreshCurrentFolder),
 		FCanExecuteAction::CreateRaw(this, &FLandscapeHeightmapTrackerModule::CanExecuteRefreshCurrentFolder));
+	PluginCommands->MapAction(
+		FLandscapeHeightmapTrackerCommands::Get().ScanVaultImport,
+		FExecuteAction::CreateRaw(this, &FLandscapeHeightmapTrackerModule::ExecuteScanVaultImport),
+		FCanExecuteAction());
 
 	FEditorModeRegistry::Get().RegisterMode<FLandscapeHeightmapTrackerEdMode>(
 		EditorModeId,
@@ -330,6 +343,60 @@ void FLandscapeHeightmapTrackerModule::ExecuteRefreshCurrentFolder()
 	RefreshContentPath(InternalPath);
 }
 
+void FLandscapeHeightmapTrackerModule::ExecuteScanVaultImport()
+{
+	IDesktopPlatform* DesktopPlatform = FDesktopPlatformModule::Get();
+	if (!DesktopPlatform)
+	{
+		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("ScanVaultNoDesktopPlatform", "ScanVault import failed. Desktop platform service is unavailable."));
+		return;
+	}
+
+	TArray<FString> SelectedFiles;
+	const void* ParentWindowHandle = FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr);
+	const bool bPicked = DesktopPlatform->OpenFileDialog(
+		ParentWindowHandle,
+		TEXT("ScanVault Import Package"),
+		FString(),
+		FString(),
+		TEXT("ScanVault manifests (*.scanvault-ue.json)|*.scanvault-ue.json|JSON files (*.json)|*.json"),
+		EFileDialogFlags::None,
+		SelectedFiles);
+
+	if (!bPicked || SelectedFiles.IsEmpty())
+	{
+		return;
+	}
+
+	LandscapeHeightmapTracker::ScanVault::FScanVaultImportPlan ImportPlan =
+		LandscapeHeightmapTracker::ScanVault::FScanVaultManifestReader::ReadFromFile(SelectedFiles[0]);
+
+	TSharedRef<SWindow> Window = SNew(SWindow)
+		.Title(LOCTEXT("ScanVaultImportWindowTitle", "ScanVault Import Package"))
+		.ClientSize(FVector2D(720.0f, 620.0f))
+		.SupportsMaximize(false)
+		.SupportsMinimize(false);
+
+	Window->SetContent(
+		SNew(LandscapeHeightmapTracker::ScanVault::SScanVaultImportWindow)
+		.OwnerWindow(Window)
+		.ImportPlan(ImportPlan)
+		.OnImportConfirmed(LandscapeHeightmapTracker::ScanVault::FOnScanVaultImportConfirmed::CreateLambda(
+			[](const LandscapeHeightmapTracker::ScanVault::FScanVaultImportPlan& ConfirmedPlan, LandscapeHeightmapTracker::ScanVault::EConflictPolicy ConflictPolicy)
+			{
+				LandscapeHeightmapTracker::ScanVault::FScanVaultImportRequest Request;
+				Request.Plan = ConfirmedPlan;
+				Request.ConflictPolicy = ConflictPolicy;
+				const LandscapeHeightmapTracker::ScanVault::FScanVaultImportReport Report =
+					LandscapeHeightmapTracker::ScanVault::FScanVaultImporter::Import(Request);
+				const FString ReportText = LandscapeHeightmapTracker::ScanVault::BuildReportText(Report);
+				FPlatformApplicationMisc::ClipboardCopy(*ReportText);
+				FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(ReportText));
+			})));
+
+	FSlateApplication::Get().AddModalWindow(Window, nullptr);
+}
+
 void FLandscapeHeightmapTrackerModule::RefreshContentPath(const FString& VirtualPath)
 {
 	if (bIsRefreshingContent)
@@ -417,6 +484,7 @@ void FLandscapeHeightmapTrackerModule::RegisterMenus()
 	Section.AddMenuEntryWithCommandList(FLandscapeHeightmapTrackerCommands::Get().OpenPluginWindow, PluginCommands);
 	Section.AddMenuEntryWithCommandList(FLandscapeHeightmapTrackerCommands::Get().RefreshContent, PluginCommands);
 	Section.AddMenuEntryWithCommandList(FLandscapeHeightmapTrackerCommands::Get().RefreshCurrentFolder, PluginCommands);
+	Section.AddMenuEntryWithCommandList(FLandscapeHeightmapTrackerCommands::Get().ScanVaultImport, PluginCommands);
 }
 
 #undef LOCTEXT_NAMESPACE
