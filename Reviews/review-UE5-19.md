@@ -19,18 +19,22 @@ Implemented ScanVault Importer v1 on branch `codex/UE5-19-scanvault-importer-v1`
   - Slate preview window.
 - Added `ScanVault Import Package` command under the existing Tools menu section.
 - Added focused ScanVault automation tests.
+- Fixed review feedback from `UE5-19-fix-save-failure-cleanup.md`:
+  - `SaveSessionAssets(...)` failure now cleans up session-created assets before return.
+  - Cleanup complete returns `Failed`.
+  - Cleanup incomplete returns `PartialImport` and preserves leftover object paths.
 
 ## Validation
 
 - `git diff --check`: passed.
-- `RunUAT BuildPlugin` passed from short package path `C:\Temp\LHTP19`.
-- CRG post-change build completed.
+- `RunUAT BuildPlugin` passed from short package path `C:\Temp\LHTP19Fix`.
+- Host build passed for `UE57EditorEditor Win64 Development`.
+- `LandscapeHeightmapTracker.ScanVault.*` automation passed: 3 succeeded, 0 failed.
+- CRG post-change update completed.
 - Graphify post-change update completed after escalation.
 
 ## Not Completed
 
-- Host-project compile was blocked by active Live Coding in an open editor session.
-- Automation tests in the real UE57Editor host were not runnable until that host plugin DLL can be rebuilt.
 - Manual import of real MLV-14 ScanVault manifests was not performed in this non-interactive session.
 
 ## Notes

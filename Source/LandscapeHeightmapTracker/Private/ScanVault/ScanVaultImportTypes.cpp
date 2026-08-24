@@ -229,6 +229,11 @@ bool HasBlockingIssues(const TArray<FImportIssue>& Issues)
 	});
 }
 
+void ApplyFatalFailureCleanupStatus(FScanVaultImportReport& Report, bool bCleanupComplete)
+{
+	Report.Status = bCleanupComplete ? EImportStatus::Failed : EImportStatus::PartialImport;
+}
+
 FString ImportStatusToString(EImportStatus Status)
 {
 	switch (Status)

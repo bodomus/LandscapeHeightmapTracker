@@ -105,6 +105,13 @@ Conflict checks include loaded objects and on-disk packages.
 
 Created assets are tracked per import session. On fatal failure, the importer deletes only session-created assets. Leftovers make the report `PartialImport`.
 
+## Review Fixes
+
+- Fixed the save-failure path so `SaveSessionAssets(...)` failure now triggers cleanup of session-created assets before returning.
+- Added `ApplyFatalFailureCleanupStatus(...)` to keep the fatal-failure cleanup status policy testable without mocking `UPackage::SavePackage`.
+- Added regression coverage for complete cleanup returning `Failed` with no leftovers and incomplete cleanup returning `PartialImport` while preserving `LeftoverObjectPaths`.
+- Existing fatal cleanup paths for texture, mesh, material-parent, and material-instance failures were left unchanged.
+
 ## Tests
 
 Added:
@@ -116,14 +123,14 @@ Added:
 ## Validation Results
 
 - `git diff --check`: passed.
-- Packaged plugin build:
-  - first workspace package path failed due Windows MAX_PATH;
-  - short path command passed:
-    `RunUAT.bat BuildPlugin -Plugin='J:\Projects\UE_Projects\UE57Editor\Plugins\LandscapeHeightmapTracker\LandscapeHeightmapTracker.uplugin' -Package='C:\Temp\LHTP19' -TargetPlatforms=Win64 -StrictIncludes`
-- Host project build:
-  - blocked because Live Coding is active in an open editor session.
-- Focused automation in main host:
-  - could not discover new tests because host plugin DLL was not rebuilt; host build was blocked by Live Coding.
+- Packaged plugin build passed:
+  `RunUAT.bat BuildPlugin -Plugin='J:\Projects\UE_Projects\UE57Editor\Plugins\LandscapeHeightmapTracker\LandscapeHeightmapTracker.uplugin' -Package='C:\Temp\LHTP19Fix' -TargetPlatforms=Win64 -StrictIncludes`
+- Host project build passed:
+  `Build.bat UE57EditorEditor Win64 Development -Project='J:\Projects\UE_Projects\UE57Editor\UE57Editor.uproject' -NoHotReload`
+- Focused automation in main host passed:
+  `UnrealEditor-Cmd.exe 'J:\Projects\UE_Projects\UE57Editor\UE57Editor.uproject' -unattended -nop4 -nosplash -NullRHI -ExecCmds='Automation RunTests LandscapeHeightmapTracker.ScanVault; Quit' -TestExit='Automation Test Queue Empty' -ReportOutputPath='J:\Projects\UE_Projects\UE57Editor\Plugins\LandscapeHeightmapTracker\Saved\Automation\UE5-19-fix'`
+  - Result: 3 succeeded, 0 failed.
+  - Report: `Saved/Automation/UE5-19-fix/index.json`
 - Focused automation in packaged output:
   - not runnable because `BuildPlugin` final output does not preserve the temporary HostProject descriptor.
 - Manual real-manifest import validation:
@@ -140,4 +147,3 @@ Added:
 - Real texture/mesh/material/Nanite import behavior still needs manual UE 5.7 validation with actual MLV-14 schema v1 manifests.
 - Multi-slot mesh material assignment warns and leaves slots unchanged.
 - `.abc` primary mesh paths are accepted by validation for UE import, but custom LOD import is UE static-mesh-subsystem dependent and primarily FBX-oriented.
-- Automation tests compile in packaged build, but were not executed because the active Live Coding session blocked rebuilding the real host plugin DLL.

@@ -101,6 +101,17 @@ bool FScanVaultPolicyTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("role is explicit, not filename based"), StaticCast<int32>(TextureRoleFromString(TEXT("normal"))), StaticCast<int32>(ETextureRole::Normal));
 	TestEqual(TEXT("unknown role rejected"), StaticCast<int32>(TextureRoleFromString(TEXT("wood_albedo_from_filename"))), StaticCast<int32>(ETextureRole::Invalid));
 
+	FScanVaultImportReport CleanupCompleteReport;
+	ApplyFatalFailureCleanupStatus(CleanupCompleteReport, true);
+	TestEqual(TEXT("fatal failure with complete cleanup is Failed"), StaticCast<int32>(CleanupCompleteReport.Status), StaticCast<int32>(EImportStatus::Failed));
+	TestEqual(TEXT("complete cleanup leaves no leftovers"), CleanupCompleteReport.LeftoverObjectPaths.Num(), 0);
+
+	FScanVaultImportReport CleanupIncompleteReport;
+	CleanupIncompleteReport.LeftoverObjectPaths.Add(TEXT("/Game/Megascans/Rock/T_Rock_BC.T_Rock_BC"));
+	ApplyFatalFailureCleanupStatus(CleanupIncompleteReport, false);
+	TestEqual(TEXT("fatal failure with incomplete cleanup is PartialImport"), StaticCast<int32>(CleanupIncompleteReport.Status), StaticCast<int32>(EImportStatus::PartialImport));
+	TestEqual(TEXT("incomplete cleanup preserves leftovers"), CleanupIncompleteReport.LeftoverObjectPaths.Num(), 1);
+
 	FScanVaultManifest Manifest;
 	Manifest.SchemaVersion = 1;
 	Manifest.PackageId = TEXT("package");

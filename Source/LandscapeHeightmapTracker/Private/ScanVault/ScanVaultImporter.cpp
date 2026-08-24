@@ -558,7 +558,8 @@ FScanVaultImportReport FScanVaultImporter::Import(const FScanVaultImportRequest&
 
 	if (!SaveSessionAssets(SessionCreatedAssets, Report))
 	{
-		Report.Status = EImportStatus::Failed;
+		const bool bCleanupComplete = CleanupCreatedAssets(SessionCreatedAssets, Report);
+		ApplyFatalFailureCleanupStatus(Report, bCleanupComplete);
 		Report.DurationSeconds = FPlatformTime::Seconds() - StartTime;
 		return Report;
 	}
