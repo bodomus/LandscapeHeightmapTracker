@@ -21,6 +21,9 @@ public class LandscapeHeightmapTracker : ModuleRules
 			new string[]
 			{
 				"ApplicationCore",
+				"AssetRegistry",
+				"ContentBrowser",
+				"ContentBrowserData",
 				"EditorFramework",
 				"DesktopPlatform",
 				"ImageWrapper",

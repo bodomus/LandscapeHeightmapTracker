@@ -1,8 +1,14 @@
 #include "LandscapeHeightmapTrackerModule.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "ContentBrowserItemPath.h"
+#include "ContentBrowserModule.h"
+#include "ContentRefreshPathUtils.h"
 #include "EditorModeManager.h"
 #include "EditorModeRegistry.h"
 #include "Dom/JsonObject.h"
+#include "Framework/Notifications/NotificationManager.h"
+#include "IContentBrowserSingleton.h"
 #include "Interfaces/IPluginManager.h"
 #include "LandscapeHeightmapTrackerCommands.h"
 #include "LandscapeHeightmapTrackerEdMode.h"
@@ -14,6 +20,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "ToolMenus.h"
 #include "Widgets/Docking/SDockTab.h"
+#include "Widgets/Notifications/SNotificationList.h"
 
 #define LOCTEXT_NAMESPACE "FLandscapeHeightmapTrackerModule"
 
@@ -33,6 +40,43 @@ static TWeakObjectPtr<AActor> GReverseMarkerOwner;
 
 namespace
 {
+	TSharedPtr<SNotificationItem> BeginRefreshNotification(const FString& VirtualPath)
+	{
+		FNotificationInfo NotificationInfo(FText::Format(
+			LOCTEXT("RefreshingContentNotification", "Refreshing Content ({0})..."),
+			FText::FromString(VirtualPath)));
+		NotificationInfo.bFireAndForget = false;
+		NotificationInfo.bUseThrobber = true;
+		NotificationInfo.FadeOutDuration = 0.2f;
+		return FSlateNotificationManager::Get().AddNotification(NotificationInfo);
+	}
+
+	void CompleteRefreshNotification(
+		const TSharedPtr<SNotificationItem>& Notification,
+		const FText& Text,
+		SNotificationItem::ECompletionState CompletionState)
+	{
+		if (Notification.IsValid())
+		{
+			Notification->SetText(Text);
+			Notification->SetCompletionState(CompletionState);
+			Notification->ExpireAndFadeout();
+		}
+	}
+
+	void ShowRefreshFailure(const FText& Text)
+	{
+		FNotificationInfo NotificationInfo(Text);
+		NotificationInfo.ExpireDuration = 5.0f;
+		NotificationInfo.FadeOutDuration = 0.2f;
+		const TSharedPtr<SNotificationItem> Notification =
+			FSlateNotificationManager::Get().AddNotification(NotificationInfo);
+		if (Notification.IsValid())
+		{
+			Notification->SetCompletionState(SNotificationItem::CS_Fail);
+		}
+	}
+
 	FString ReadPluginVersion()
 	{
 		const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("LandscapeHeightmapTracker"));
@@ -180,6 +224,14 @@ void FLandscapeHeightmapTrackerModule::StartupModule()
 		FLandscapeHeightmapTrackerCommands::Get().OpenPluginWindow,
 		FExecuteAction::CreateRaw(this, &FLandscapeHeightmapTrackerModule::PluginButtonClicked),
 		FCanExecuteAction());
+	PluginCommands->MapAction(
+		FLandscapeHeightmapTrackerCommands::Get().RefreshContent,
+		FExecuteAction::CreateRaw(this, &FLandscapeHeightmapTrackerModule::ExecuteRefreshContent),
+		FCanExecuteAction::CreateRaw(this, &FLandscapeHeightmapTrackerModule::CanExecuteRefreshContent));
+	PluginCommands->MapAction(
+		FLandscapeHeightmapTrackerCommands::Get().RefreshCurrentFolder,
+		FExecuteAction::CreateRaw(this, &FLandscapeHeightmapTrackerModule::ExecuteRefreshCurrentFolder),
+		FCanExecuteAction::CreateRaw(this, &FLandscapeHeightmapTrackerModule::CanExecuteRefreshCurrentFolder));
 
 	FEditorModeRegistry::Get().RegisterMode<FLandscapeHeightmapTrackerEdMode>(
 		EditorModeId,
@@ -243,6 +295,119 @@ void FLandscapeHeightmapTrackerModule::PluginButtonClicked()
 	FGlobalTabmanager::Get()->TryInvokeTab(PluginTabName);
 }
 
+void FLandscapeHeightmapTrackerModule::ExecuteRefreshContent()
+{
+	RefreshContentPath(TEXT("/Game"));
+}
+
+void FLandscapeHeightmapTrackerModule::ExecuteRefreshCurrentFolder()
+{
+	FContentBrowserModule* ContentBrowserModule =
+		FModuleManager::Get().LoadModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
+	if (!ContentBrowserModule)
+	{
+		UE_LOG(LogLandscapeHeightmapTracker, Error, TEXT("Content refresh failed: ContentBrowser module is unavailable."));
+		ShowRefreshFailure(LOCTEXT("RefreshCurrentFolderNoContentBrowser", "Content refresh failed. See Output Log."));
+		return;
+	}
+
+	const FContentBrowserItemPath CurrentPath = ContentBrowserModule->Get().GetCurrentPath();
+	if (!CurrentPath.HasInternalPath())
+	{
+		UE_LOG(LogLandscapeHeightmapTracker, Warning, TEXT("Content refresh skipped: the current Content Browser path has no internal package path."));
+		ShowRefreshFailure(LOCTEXT("RefreshCurrentFolderNoInternalPath", "Select a folder under /Game and try again."));
+		return;
+	}
+
+	const FString InternalPath = CurrentPath.GetInternalPathString();
+	if (!LandscapeHeightmapTracker::ContentRefresh::IsProjectContentPath(InternalPath))
+	{
+		UE_LOG(LogLandscapeHeightmapTracker, Warning, TEXT("Content refresh rejected non-project path '%s'."), *InternalPath);
+		ShowRefreshFailure(LOCTEXT("RefreshCurrentFolderOutsideGame", "Refresh Current Folder is limited to /Game."));
+		return;
+	}
+
+	RefreshContentPath(InternalPath);
+}
+
+void FLandscapeHeightmapTrackerModule::RefreshContentPath(const FString& VirtualPath)
+{
+	if (bIsRefreshingContent)
+	{
+		UE_LOG(LogLandscapeHeightmapTracker, Verbose, TEXT("Ignoring overlapping content refresh request for '%s'."), *VirtualPath);
+		return;
+	}
+
+	if (!LandscapeHeightmapTracker::ContentRefresh::IsProjectContentPath(VirtualPath))
+	{
+		UE_LOG(LogLandscapeHeightmapTracker, Error, TEXT("Content refresh rejected invalid project path '%s'."), *VirtualPath);
+		ShowRefreshFailure(LOCTEXT("RefreshContentInvalidPath", "Content refresh failed. See Output Log."));
+		return;
+	}
+
+	TGuardValue<bool> RefreshGuard(bIsRefreshingContent, true);
+	const double StartTimeSeconds = FPlatformTime::Seconds();
+	const TSharedPtr<SNotificationItem> Notification = BeginRefreshNotification(VirtualPath);
+	UE_LOG(LogLandscapeHeightmapTracker, Log, TEXT("Starting forced Asset Registry scan for '%s'."), *VirtualPath);
+
+	FAssetRegistryModule* AssetRegistryModule =
+		FModuleManager::Get().LoadModulePtr<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	if (!AssetRegistryModule)
+	{
+		UE_LOG(LogLandscapeHeightmapTracker, Error, TEXT("Content refresh failed: AssetRegistry module is unavailable."));
+		CompleteRefreshNotification(
+			Notification,
+			LOCTEXT("RefreshContentAssetRegistryUnavailable", "Content refresh failed. See Output Log."),
+			SNotificationItem::CS_Fail);
+		return;
+	}
+
+	TArray<FString> PathsToScan;
+	PathsToScan.Add(VirtualPath);
+	AssetRegistryModule->Get().ScanPathsSynchronous(
+		PathsToScan,
+		/* bForceRescan */ true,
+		/* bIgnoreDenyListScanFilters */ false);
+
+	const double ElapsedSeconds = FPlatformTime::Seconds() - StartTimeSeconds;
+	UE_LOG(
+		LogLandscapeHeightmapTracker,
+		Log,
+		TEXT("Forced Asset Registry scan for '%s' completed in %.2f seconds."),
+		*VirtualPath,
+		ElapsedSeconds);
+	CompleteRefreshNotification(
+		Notification,
+		FText::Format(
+			LOCTEXT("RefreshContentCompleted", "Content refresh completed in {0} s."),
+			FText::AsNumber(ElapsedSeconds, &FNumberFormattingOptions().SetMaximumFractionalDigits(2))),
+		SNotificationItem::CS_Success);
+}
+
+bool FLandscapeHeightmapTrackerModule::CanExecuteRefreshContent() const
+{
+	return !bIsRefreshingContent;
+}
+
+bool FLandscapeHeightmapTrackerModule::CanExecuteRefreshCurrentFolder() const
+{
+	if (bIsRefreshingContent)
+	{
+		return false;
+	}
+
+	const FContentBrowserModule* ContentBrowserModule =
+		FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
+	if (!ContentBrowserModule)
+	{
+		return false;
+	}
+
+	const FContentBrowserItemPath CurrentPath = ContentBrowserModule->Get().GetCurrentPath();
+	return CurrentPath.HasInternalPath()
+		&& LandscapeHeightmapTracker::ContentRefresh::IsProjectContentPath(CurrentPath.GetInternalPathString());
+}
+
 void FLandscapeHeightmapTrackerModule::RegisterMenus()
 {
 	FToolMenuOwnerScoped OwnerScoped(this);
@@ -250,6 +415,8 @@ void FLandscapeHeightmapTrackerModule::RegisterMenus()
 	UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.MainMenu.Tools");
 	FToolMenuSection& Section = Menu->FindOrAddSection("LandscapeHeightmapTracker");
 	Section.AddMenuEntryWithCommandList(FLandscapeHeightmapTrackerCommands::Get().OpenPluginWindow, PluginCommands);
+	Section.AddMenuEntryWithCommandList(FLandscapeHeightmapTrackerCommands::Get().RefreshContent, PluginCommands);
+	Section.AddMenuEntryWithCommandList(FLandscapeHeightmapTrackerCommands::Get().RefreshCurrentFolder, PluginCommands);
 }
 
 #undef LOCTEXT_NAMESPACE
