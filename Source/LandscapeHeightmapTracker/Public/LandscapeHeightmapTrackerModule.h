@@ -49,6 +49,7 @@ private:
 	void PluginButtonClicked();
 	void ExecuteRefreshContent();
 	void ExecuteRefreshCurrentFolder();
+	void ExecuteScanVaultImport();
 	void RefreshContentPath(const FString& VirtualPath);
 	bool CanExecuteRefreshContent() const;
 	bool CanExecuteRefreshCurrentFolder() const;

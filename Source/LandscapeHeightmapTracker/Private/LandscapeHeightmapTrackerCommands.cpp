@@ -26,6 +26,12 @@ void FLandscapeHeightmapTrackerCommands::RegisterCommands()
 		"Rescan the current project Content Browser folder and its subfolders.",
 		EUserInterfaceActionType::Button,
 		FInputChord());
+	UI_COMMAND(
+		ScanVaultImport,
+		"ScanVault Import Package",
+		"Import a ScanVault Unreal package manifest.",
+		EUserInterfaceActionType::Button,
+		FInputChord());
 }
 
 #undef LOCTEXT_NAMESPACE

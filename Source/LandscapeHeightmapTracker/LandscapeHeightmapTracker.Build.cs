@@ -22,6 +22,7 @@ public class LandscapeHeightmapTracker : ModuleRules
 			{
 				"ApplicationCore",
 				"AssetRegistry",
+				"AssetTools",
 				"ContentBrowser",
 				"ContentBrowserData",
 				"EditorFramework",
@@ -30,8 +31,10 @@ public class LandscapeHeightmapTracker : ModuleRules
 				"InputCore",
 				"Json",
 				"LevelEditor",
+				"MaterialEditor",
 				"PropertyEditor",
 				"Projects",
+				"StaticMeshEditor",
 				"ToolMenus",
 				"UnrealEd"
 			});

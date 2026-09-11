@@ -14,4 +14,5 @@ public:
 	TSharedPtr<FUICommandInfo> OpenPluginWindow;
 	TSharedPtr<FUICommandInfo> RefreshContent;
 	TSharedPtr<FUICommandInfo> RefreshCurrentFolder;
+	TSharedPtr<FUICommandInfo> ScanVaultImport;
 };
