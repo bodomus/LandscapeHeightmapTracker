@@ -23,11 +23,15 @@ Implemented ScanVault Importer v1 on branch `codex/UE5-19-scanvault-importer-v1`
   - `SaveSessionAssets(...)` failure now cleans up session-created assets before return.
   - Cleanup complete returns `Failed`.
   - Cleanup incomplete returns `PartialImport` and preserves leftover object paths.
+- Fixed review feedback from `UE5-19-fix-material-parameter-readback.md`:
+  - Material Instance texture assignment is now verified by read-back after the setter.
+  - `material.mapping.assign_failed` is emitted only when read-back is null or different.
+  - `material.mapping.texture_missing` and `material.mapping.parameter_missing` behavior is preserved.
 
 ## Validation
 
 - `git diff --check`: passed.
-- `RunUAT BuildPlugin` passed from short package path `C:\Temp\LHTP19Fix`.
+- `RunUAT BuildPlugin` passed from short package path `C:\Temp\LHTP19Readback`.
 - Host build passed for `UE57EditorEditor Win64 Development`.
 - `LandscapeHeightmapTracker.ScanVault.*` automation passed: 3 succeeded, 0 failed.
 - CRG post-change update completed.
@@ -36,6 +40,7 @@ Implemented ScanVault Importer v1 on branch `codex/UE5-19-scanvault-importer-v1`
 ## Not Completed
 
 - Manual import of real MLV-14 ScanVault manifests was not performed in this non-interactive session.
+- Manual `Wooden_Sticks_And_Twigs` read-back validation was not performed in this non-interactive session.
 
 ## Notes
 

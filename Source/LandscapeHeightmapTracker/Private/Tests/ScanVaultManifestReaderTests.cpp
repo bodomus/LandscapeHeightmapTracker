@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "LandscapeHeightmapTrackerCommands.h"
+#include "Engine/Texture2D.h"
 #include "Misc/AutomationTest.h"
 #include "ScanVault/ScanVaultImportTypes.h"
 #include "ScanVault/ScanVaultManifestReader.h"
@@ -111,6 +112,12 @@ bool FScanVaultPolicyTest::RunTest(const FString& Parameters)
 	ApplyFatalFailureCleanupStatus(CleanupIncompleteReport, false);
 	TestEqual(TEXT("fatal failure with incomplete cleanup is PartialImport"), StaticCast<int32>(CleanupIncompleteReport.Status), StaticCast<int32>(EImportStatus::PartialImport));
 	TestEqual(TEXT("incomplete cleanup preserves leftovers"), CleanupIncompleteReport.LeftoverObjectPaths.Num(), 1);
+
+	UTexture2D* ExpectedTexture = NewObject<UTexture2D>();
+	UTexture2D* DifferentTexture = NewObject<UTexture2D>();
+	TestFalse(TEXT("setter failure with matching read-back does not warn"), ShouldWarnTextureParameterAssignmentFailed(ExpectedTexture, ExpectedTexture));
+	TestTrue(TEXT("read-back mismatch preserves assign_failed"), ShouldWarnTextureParameterAssignmentFailed(ExpectedTexture, DifferentTexture));
+	TestTrue(TEXT("null read-back preserves assign_failed"), ShouldWarnTextureParameterAssignmentFailed(ExpectedTexture, nullptr));
 
 	FScanVaultManifest Manifest;
 	Manifest.SchemaVersion = 1;
