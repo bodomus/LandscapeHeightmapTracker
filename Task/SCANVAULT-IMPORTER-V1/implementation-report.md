@@ -111,6 +111,9 @@ Created assets are tracked per import session. On fatal failure, the importer de
 - Added `ApplyFatalFailureCleanupStatus(...)` to keep the fatal-failure cleanup status policy testable without mocking `UPackage::SavePackage`.
 - Added regression coverage for complete cleanup returning `Failed` with no leftovers and incomplete cleanup returning `PartialImport` while preserving `LeftoverObjectPaths`.
 - Existing fatal cleanup paths for texture, mesh, material-parent, and material-instance failures were left unchanged.
+- Fixed false `material.mapping.assign_failed` warnings by verifying Material Instance texture assignment through read-back after `SetMaterialInstanceTextureParameterValue(...)`.
+- Added `ShouldWarnTextureParameterAssignmentFailed(...)` regression coverage so setter/reporting policy only warns when read-back is null or different from the expected texture.
+- Existing `material.mapping.texture_missing` and `material.mapping.parameter_missing` checks were preserved.
 
 ## Tests
 
@@ -124,13 +127,13 @@ Added:
 
 - `git diff --check`: passed.
 - Packaged plugin build passed:
-  `RunUAT.bat BuildPlugin -Plugin='J:\Projects\UE_Projects\UE57Editor\Plugins\LandscapeHeightmapTracker\LandscapeHeightmapTracker.uplugin' -Package='C:\Temp\LHTP19Fix' -TargetPlatforms=Win64 -StrictIncludes`
+  `RunUAT.bat BuildPlugin -Plugin='J:\Projects\UE_Projects\UE57Editor\Plugins\LandscapeHeightmapTracker\LandscapeHeightmapTracker.uplugin' -Package='C:\Temp\LHTP19Readback' -TargetPlatforms=Win64 -StrictIncludes`
 - Host project build passed:
   `Build.bat UE57EditorEditor Win64 Development -Project='J:\Projects\UE_Projects\UE57Editor\UE57Editor.uproject' -NoHotReload`
 - Focused automation in main host passed:
-  `UnrealEditor-Cmd.exe 'J:\Projects\UE_Projects\UE57Editor\UE57Editor.uproject' -unattended -nop4 -nosplash -NullRHI -ExecCmds='Automation RunTests LandscapeHeightmapTracker.ScanVault; Quit' -TestExit='Automation Test Queue Empty' -ReportOutputPath='J:\Projects\UE_Projects\UE57Editor\Plugins\LandscapeHeightmapTracker\Saved\Automation\UE5-19-fix'`
+  `UnrealEditor-Cmd.exe 'J:\Projects\UE_Projects\UE57Editor\UE57Editor.uproject' -unattended -nop4 -nosplash -NullRHI -ExecCmds='Automation RunTests LandscapeHeightmapTracker.ScanVault; Quit' -TestExit='Automation Test Queue Empty' -ReportOutputPath='J:\Projects\UE_Projects\UE57Editor\Plugins\LandscapeHeightmapTracker\Saved\Automation\UE5-19-readback'`
   - Result: 3 succeeded, 0 failed.
-  - Report: `Saved/Automation/UE5-19-fix/index.json`
+  - Report: `Saved/Automation/UE5-19-readback/index.json`
 - Focused automation in packaged output:
   - not runnable because `BuildPlugin` final output does not preserve the temporary HostProject descriptor.
 - Manual real-manifest import validation:
@@ -138,12 +141,13 @@ Added:
 
 ## Post-change Graph Validation
 
-- CRG updated: `code-review-graph build --repo .` succeeded.
+- CRG updated: `code-review-graph update --brief` succeeded.
 - CRG brief impact: `code-review-graph detect-changes --brief` succeeded but remained coarse; source and build validation were used as authority.
 - Graphify updated: first attempt hit `WinError 5`; escalated `graphify update .` succeeded and rebuilt `graphify-out`.
 
 ## Known Limitations
 
 - Real texture/mesh/material/Nanite import behavior still needs manual UE 5.7 validation with actual MLV-14 schema v1 manifests.
+- Manual read-back validation with `Wooden_Sticks_And_Twigs` was not performed in this non-interactive command session.
 - Multi-slot mesh material assignment warns and leaves slots unchanged.
 - `.abc` primary mesh paths are accepted by validation for UE import, but custom LOD import is UE static-mesh-subsystem dependent and primarily FBX-oriented.

@@ -195,6 +195,7 @@ void ApplyTextureSettings(UTexture2D& Texture, ETextureRole Role);
 void AddIssue(TArray<FImportIssue>& Issues, EImportIssueSeverity Severity, const FString& Code, const FString& Message);
 bool HasBlockingIssues(const TArray<FImportIssue>& Issues);
 void ApplyFatalFailureCleanupStatus(FScanVaultImportReport& Report, bool bCleanupComplete);
+bool ShouldWarnTextureParameterAssignmentFailed(const UTexture* ExpectedTexture, const UTexture* AssignedTexture);
 FString ImportStatusToString(EImportStatus Status);
 FString BuildReportText(const FScanVaultImportReport& Report);
 void ValidateManifestForImport(const FScanVaultManifest& Manifest, TArray<FImportIssue>& Issues);

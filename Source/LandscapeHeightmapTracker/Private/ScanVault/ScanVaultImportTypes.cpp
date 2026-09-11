@@ -234,6 +234,11 @@ void ApplyFatalFailureCleanupStatus(FScanVaultImportReport& Report, bool bCleanu
 	Report.Status = bCleanupComplete ? EImportStatus::Failed : EImportStatus::PartialImport;
 }
 
+bool ShouldWarnTextureParameterAssignmentFailed(const UTexture* ExpectedTexture, const UTexture* AssignedTexture)
+{
+	return AssignedTexture != ExpectedTexture;
+}
+
 FString ImportStatusToString(EImportStatus Status)
 {
 	switch (Status)

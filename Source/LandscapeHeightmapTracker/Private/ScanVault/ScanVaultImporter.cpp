@@ -270,9 +270,12 @@ void AssignTextureParameters(
 		}
 
 		UTexture* TextureValue = *Texture;
-		if (!UMaterialEditingLibrary::SetMaterialInstanceTextureParameterValue(Instance, Mapping.ParameterName, TextureValue))
+		UMaterialEditingLibrary::SetMaterialInstanceTextureParameterValue(Instance, Mapping.ParameterName, TextureValue);
+		UMaterialEditingLibrary::UpdateMaterialInstance(Instance);
+		UTexture* AssignedTexture = UMaterialEditingLibrary::GetMaterialInstanceTextureParameterValue(Instance, Mapping.ParameterName);
+		if (ShouldWarnTextureParameterAssignmentFailed(TextureValue, AssignedTexture))
 		{
-			AddIssue(Report.Issues, EImportIssueSeverity::Warning, TEXT("material.mapping.assign_failed"), FString::Printf(TEXT("Failed to assign texture parameter '%s'."), *Mapping.ParameterName.ToString()));
+			AddIssue(Report.Issues, EImportIssueSeverity::Warning, TEXT("material.mapping.assign_failed"), FString::Printf(TEXT("Failed to verify texture parameter '%s'."), *Mapping.ParameterName.ToString()));
 		}
 	}
 
