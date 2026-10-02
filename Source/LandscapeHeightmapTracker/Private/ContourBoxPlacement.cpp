@@ -60,28 +60,27 @@ bool BuildPolyline(const TArray<FVector>& InputPoints, bool bClosed, FPolylineDa
 	return true;
 }
 
-bool SamplePolyline(const FPolylineData& Polyline, double Distance, FVector& OutPoint)
+bool SamplePolyline(const FPolylineData& Polyline, double Distance, int32& SegmentIndex, FVector& OutPoint)
 {
 	if (Polyline.SegmentLengths.IsEmpty() || Polyline.TotalLength <= KINDA_SMALL_NUMBER)
 	{
 		return false;
 	}
 	Distance = FMath::Clamp(Distance, 0.0, Polyline.TotalLength);
-	for (int32 SegmentIndex = 0; SegmentIndex < Polyline.SegmentLengths.Num(); ++SegmentIndex)
+	// Generate samples in nondecreasing distance order, including gap=0. Each
+	// segment is visited at most once across all start/center/end samples.
+	while (SegmentIndex < Polyline.SegmentLengths.Num() - 1 &&
+		Distance > Polyline.SegmentStarts[SegmentIndex] + Polyline.SegmentLengths[SegmentIndex])
 	{
-		const double SegmentStart = Polyline.SegmentStarts[SegmentIndex];
-		const double SegmentLength = Polyline.SegmentLengths[SegmentIndex];
-		const bool bLast = SegmentIndex == Polyline.SegmentLengths.Num() - 1;
-		if (Distance <= SegmentStart + SegmentLength || bLast)
-		{
-			const FVector& A = Polyline.Points[SegmentIndex];
-			const FVector& B = Polyline.Points[(SegmentIndex + 1) % Polyline.Points.Num()];
-			const double Alpha = FMath::Clamp((Distance - SegmentStart) / SegmentLength, 0.0, 1.0);
-			OutPoint = FMath::Lerp(A, B, Alpha);
-			return true;
-		}
+		++SegmentIndex;
 	}
-	return false;
+	const double SegmentStart = Polyline.SegmentStarts[SegmentIndex];
+	const double SegmentLength = Polyline.SegmentLengths[SegmentIndex];
+	const FVector& A = Polyline.Points[SegmentIndex];
+	const FVector& B = Polyline.Points[(SegmentIndex + 1) % Polyline.Points.Num()];
+	const double Alpha = FMath::Clamp((Distance - SegmentStart) / SegmentLength, 0.0, 1.0);
+	OutPoint = FMath::Lerp(A, B, Alpha);
+	return true;
 }
 }
 
@@ -119,7 +118,10 @@ FContourBoxPlacementResult FContourBoxPlacement::Generate(
 		return Result;
 	}
 
-	const int64 ExpectedCount = FMath::FloorToInt64((Polyline.TotalLength - BoxLength) / Step) + 1;
+	// A closed loop needs one gap per box, including the last-to-first seam.
+	const int64 ExpectedCount = bClosed
+		? FMath::FloorToInt64(Polyline.TotalLength / Step)
+		: FMath::FloorToInt64((Polyline.TotalLength - BoxLength) / Step) + 1;
 	if (ExpectedCount > Settings.MaxInstances)
 	{
 		Result.bIsValid = false;
@@ -135,6 +137,7 @@ FContourBoxPlacementResult FContourBoxPlacement::Generate(
 		Settings.BoxLengthMeters,
 		Settings.BoxThicknessMeters,
 		Settings.BoxHeightMeters);
+	int32 SegmentIndex = 0;
 	for (int64 Index = 0; Index < ExpectedCount; ++Index)
 	{
 		const double StartDistance = Index * Step;
@@ -143,9 +146,9 @@ FContourBoxPlacementResult FContourBoxPlacement::Generate(
 		FVector Start;
 		FVector Center;
 		FVector End;
-		if (!SamplePolyline(Polyline, StartDistance, Start) ||
-			!SamplePolyline(Polyline, CenterDistance, Center) ||
-			!SamplePolyline(Polyline, EndDistance, End))
+		if (!SamplePolyline(Polyline, StartDistance, SegmentIndex, Start) ||
+			!SamplePolyline(Polyline, CenterDistance, SegmentIndex, Center) ||
+			!SamplePolyline(Polyline, EndDistance, SegmentIndex, End))
 		{
 			continue;
 		}

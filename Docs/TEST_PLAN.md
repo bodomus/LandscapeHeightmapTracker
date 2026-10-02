@@ -13,15 +13,17 @@ LandscapeHeightmapTracker.PaintLayers.*
 LandscapeHeightmapTracker.UI.*
 LandscapeHeightmapTracker.RefreshContent.*
 LandscapeHeightmapTracker.ContourBoxes.*
-LandscapeHeightmapTracker.ContourBoxes.*
-LandscapeHeightmapTracker.ContourBoxes.*
-LandscapeHeightmapTracker.ContourBoxes.*
-LandscapeHeightmapTracker.ContourBoxes.*
 ```
 
 The mapper tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
 
 The reverse mapping tests cover UV-to-local center, corners, Flip X inversion, Flip Y inversion, non-square bounds, invalid bounds, outside UV rejection, fitted-image click hit testing, and finite vertical trace segment construction.
+
+ContourBoxes tests additionally cover generated same-height contour identities
+after a sibling disappears or is inserted, conservative rejection of old actors
+after geometry changes, isolated Update/Delete and Undo/Redo, a 50m closed
+perimeter with 10m boxes and 10m or zero gaps, short closed contours, and dense
+polyline sampling across corners and shared sample distances.
 
 The UI singleton test requires a rendering-capable editor session (for example,
 -RenderOffscreen). It opens both tool tabs, verifies that repeated Paint Layers

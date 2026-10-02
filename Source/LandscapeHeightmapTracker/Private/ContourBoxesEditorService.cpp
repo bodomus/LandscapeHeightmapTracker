@@ -97,9 +97,10 @@ bool FContourBoxesEditorService::CreateOrUpdate(
 	if (Placement.Transforms.IsEmpty())
 	{
 		OutError = FString::Printf(
-			TEXT("The contour is %.2f m long, shorter than one %.2f m box."),
+			TEXT("The contour is %.2f m long; it needs at least %.2f m for a complete box%s."),
 			Placement.PolylineLengthMeters,
-			Settings.BoxLengthMeters);
+			Settings.BoxLengthMeters + (Contour.bClosed ? Settings.GapLengthMeters : 0.0),
+			Contour.bClosed ? TEXT(" and its closing gap") : TEXT(""));
 		return false;
 	}
 

@@ -1,5 +1,34 @@
 # Review UE5-20
 
+## Review corrections — 2026-10-02
+
+Reviewed baseline: `e31d5256f7751101aec87657ab423643b7526686`.
+Corrections are in `codex/ue5-20-contour-3d-markers`; no merge was performed.
+
+- P1 addressed: IDs now digest exact canonical segment geometry, boundary height
+  and closed state, rather than spatial ordinal. Unchanged contours retain their
+  identity across sibling removal/insertion; changed geometry gets a new ID and
+  cannot adopt an old actor. Legacy ordinal-ID actors remain in the Outliner for
+  explicit removal. GeneratedTopologyIdentity tests real generator output and
+  verifies Update/Delete isolation, original transforms and Undo/Redo.
+- P2 addressed: closed loops reserve the final-to-first gap. A 50m loop with
+  10m boxes and 10m gaps now creates two boxes; the seam gap is 30m. Gap=0
+  produces five boxes. Tests check every gap via arc distances and short loops.
+- Sampling addressed: one monotonically advancing segment cursor serves all
+  start/center/end samples. Complexity is O(segments + instances). DenseSegments
+  compares a 15,000-segment path against the same sparse geometry, including
+  corners, duplicate vertices and gap=0.
+- HISM, default dimensions, Slate layout, actor lookup and transaction behavior
+  are preserved. The empty-placement message now explains the closing gap.
+
+Current validation: host editor build succeeded; ContourBoxes 9/9 succeeded;
+plugin regression 40/40 completed (38 without warnings, two UI rendering checks
+warned under NullRHI). Separate rendering verification and complete command
+evidence are recorded in `Task/UE5-20/review-fixes-report.md`.
+
+The initial implementation review below is retained with its historical evidence;
+the corrections and current validation above supersede its identity assessment.
+
 ## Verdict
 
 Implementation is ready for manual Unreal Editor visual verification. No blocking
@@ -64,8 +93,8 @@ approved yet because the ticket explicitly requires user visual verification.
 - Material color and world placement must be inspected on a real Landscape; the
   automation environment verifies state and transforms but not the final rendered
   3D result.
-- Deterministic component IDs can be reassigned after a contour topology
-  split/merge because the component order is spatially derived.
+- Geometry edits intentionally create a new identity and leave old actors for
+  manual Outliner removal. This conservative policy prevents ambiguous reassignment.
 - PIE/cooked exclusion is implemented through editor-only actor/module behavior
   and strict packaging succeeds, but final acceptance still calls for an explicit
   manual PIE/cooked observation.

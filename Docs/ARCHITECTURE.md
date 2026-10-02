@@ -149,9 +149,21 @@ FHeightContour normalized display UV points
 removes duplicate points, measures world-space XY arc length, applies the
 `BoxLength + GapLength` step, and rejects requests over the 10,000-instance
 limit. A box is emitted only when its complete occupied span fits on the contour.
+Closed contours additionally reserve a gap after the last box, before the first:
+their count is `floor(perimeter / (BoxLength + GapLength))`. Open contours may
+use the final box without a trailing gap. Sampling uses a shared forward segment
+cursor, so traversal costs O(segments + instances), rather than rescanning the
+polyline for every box.
 
-Each connected contour receives a deterministic ID from its quantized boundary
-height and deterministic spatial component order. Actor lookup additionally
+Each connected contour receives a deterministic, versioned geometry digest from
+its exact boundary height, closed flag and canonical undirected display-UV
+segments. Spatial sort controls row order only; adding/removing a sibling cannot
+reassign its actor ID. Reversing traversal or moving the closed trace start does
+not alter identity. Any change to the contour geometry conservatively receives
+a new ID: Update/Delete do not adopt an actor from the old shape. Create makes a
+new set, and old sets remain available for explicit removal in the Outliner.
+Legacy actors using height/ordinal IDs are also deliberately not adopted.
+Actor lookup additionally
 matches the assigned Landscape soft reference, so equal-height contours and
 different Landscapes remain isolated. The actor stores the ID as a UPROPERTY and
 uses the tag `LandscapeHeightmapTracker.GeneratedContourBoxes`; labels and

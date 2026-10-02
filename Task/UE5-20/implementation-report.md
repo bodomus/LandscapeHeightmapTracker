@@ -1,5 +1,17 @@
 # Implementation Report
 
+## Review corrections — 2026-10-02
+
+The implementation below describes the initial UE5-20 delivery. Review fixes
+against `e31d5256f7751101aec87657ab423643b7526686` supersede its ordinal-ID
+policy and closed-loop placement count. IDs now use exact canonical geometry;
+closed loops reserve the seam gap; sampling uses a single forward segment cursor.
+New real-generator topology, seam-gap and dense-segment tests were added.
+Current build, test commands, graph impact and remaining manual checks are in
+`review-fixes-report.md`. The final commit SHA is supplied in the completion
+response; it can also be resolved with `git log -1 --format=%H --
+Task/UE5-20/review-fixes-report.md`.
+
 ## Ticket
 
 UE5-20 — LandscapeHeightmapTracker: 3D-маркеры вдоль изолинии.
@@ -113,9 +125,8 @@ UE5-20 — LandscapeHeightmapTracker: 3D-маркеры вдоль изолин�
   alignment, material color, gaps, tangent orientation, bottom Z, Outliner
   organization, manual actor deletion recovery, Update, Undo/Redo, PIE hiding,
   and cooked-build exclusion.
-- Contour IDs are deterministic for a fixed generated topology. A topology
-  split/merge can change spatial component ordering and therefore remap IDs;
-  existing generated actors should be deleted/recreated after such a topology
-  change.
+- Review correction: contour IDs are independent of spatial component ordering.
+  A geometry edit gets a new identity and leaves the previous actor untouched;
+  old geometry sets and legacy ordinal-ID sets require explicit Outliner removal.
 - The ticket remains in the working state and must not be merged until the visual
   verification is accepted.
