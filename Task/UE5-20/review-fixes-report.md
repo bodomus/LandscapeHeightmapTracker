@@ -3,6 +3,7 @@
 Date: 2026-10-02. Status: 🟢 PASS for implemented fixes, build and automation.
 Branch: `codex/ue5-20-contour-3d-markers`.
 Baseline: `e31d5256f7751101aec87657ab423643b7526686`.
+Implementation commit: `3f0f87b433cc5a17245b6278d5a199487bc5d88c`.
 Final SHA is returned in the completion response. Resolve the containing commit
 with `git log -1 --format=%H -- Task/UE5-20/review-fixes-report.md`.
 No merge or push performed.
@@ -74,6 +75,11 @@ The duplicated ContourBoxes test-plan entries were consolidated.
 - CRG preflight incremental update rebuilt identity at the baseline: 68 files,
   701 nodes, 5141 edges, no errors. Post-change updates were run with base
   `e31d525`; after staging, the new test file was indexed too, without errors.
+- The implementation commit's hook completed indexing but the CLI's rich output
+  failed with UnicodeEncodeError under cp1251. The commit succeeded. A subsequent
+  MCP update returned status ok and no graph errors; the final report commit uses
+  PYTHONUTF8=1 for its hooks. This was an output-encoding issue, not a build/test
+  failure. No repository-wide encoding configuration was changed.
 - Post-change review context: medium risk, seven impacted nodes in one adjacent
   file when querying the three production files. Final radius for all five
   changed source/test files: 38 directly changed nodes, no additional resolved
@@ -162,3 +168,4 @@ logs, caches and binaries are excluded according to repository policy.
 
 UE5-20 is ready for verification, not merge. A successful fix/automation verdict
 does not substitute for the ticket's remaining user visual acceptance.
+The YouTrack State field was successfully updated to `To Verify`.

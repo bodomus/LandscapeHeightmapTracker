@@ -3,6 +3,7 @@
 ## Review corrections — 2026-10-02
 
 Reviewed baseline: `e31d5256f7751101aec87657ab423643b7526686`.
+Implementation commit: `3f0f87b433cc5a17245b6278d5a199487bc5d88c`.
 Corrections are in `codex/ue5-20-contour-3d-markers`; no merge was performed.
 
 - P1 addressed: IDs now digest exact canonical segment geometry, boundary height
