@@ -13,6 +13,10 @@ LandscapeHeightmapTracker.PaintLayers.*
 LandscapeHeightmapTracker.UI.*
 LandscapeHeightmapTracker.RefreshContent.*
 LandscapeHeightmapTracker.ContourBoxes.*
+LandscapeHeightmapTracker.ContourBoxes.*
+LandscapeHeightmapTracker.ContourBoxes.*
+LandscapeHeightmapTracker.ContourBoxes.*
+LandscapeHeightmapTracker.ContourBoxes.*
 ```
 
 The mapper tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
