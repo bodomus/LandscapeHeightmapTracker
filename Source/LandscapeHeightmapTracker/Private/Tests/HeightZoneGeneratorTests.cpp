@@ -69,6 +69,12 @@ bool FHeightZoneIslandsAndHoleTest::RunTest(const FString& Parameters)
 	Islands[5 + 1 * 7] = 10.0f;
 	const FHeightZoneResult IslandsResult = FHeightZoneGenerator::Generate(Islands, 7, 3, 5.0, EHeightZoneMode::Above);
 	TestEqual(TEXT("Two independent islands"), CountClosedContours(IslandsResult), 2);
+	if (IslandsResult.Contours.Num() == 2)
+	{
+		TestTrue(TEXT("First island has a stable identifier"), IslandsResult.Contours[0].Id.IsValid());
+		TestTrue(TEXT("Second island has a stable identifier"), IslandsResult.Contours[1].Id.IsValid());
+		TestNotEqual(TEXT("Same-height islands have independent identifiers"), IslandsResult.Contours[0].Id, IslandsResult.Contours[1].Id);
+	}
 
 	TArray<float> Ring;
 	Ring.SetNumZeroed(25);

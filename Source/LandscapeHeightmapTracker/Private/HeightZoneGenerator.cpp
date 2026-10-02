@@ -2,6 +2,30 @@
 
 namespace
 {
+FGuid MakeContourId(double BoundaryHeightMeters, int32 ComponentIndex)
+{
+	const int64 QuantizedHeight = FMath::RoundToInt64(BoundaryHeightMeters * 1000000.0);
+	const uint32 Component = static_cast<uint32>(ComponentIndex + 1);
+	return FGuid(
+		static_cast<uint32>(static_cast<uint64>(QuantizedHeight) >> 32),
+		static_cast<uint32>(QuantizedHeight),
+		Component,
+		0x4C485443u ^ Component);
+}
+
+FVector2D GetContourSortPoint(const FHeightContour& Contour)
+{
+	FVector2D Result(TNumericLimits<double>::Max(), TNumericLimits<double>::Max());
+	for (const FVector2D& Point : Contour.Points)
+	{
+		if (Point.X < Result.X || (FMath::IsNearlyEqual(Point.X, Result.X) && Point.Y < Result.Y))
+		{
+			Result = Point;
+		}
+	}
+	return Result;
+}
+
 struct FContourSegment
 {
 	FVector2D A;
@@ -241,6 +265,28 @@ TArray<FHeightContour> GenerateContours(
 			Point.X /= Width - 1;
 			Point.Y /= Height - 1;
 		}
+	}
+	Contours.Sort([](const FHeightContour& A, const FHeightContour& B)
+	{
+		const FVector2D SortA = GetContourSortPoint(A);
+		const FVector2D SortB = GetContourSortPoint(B);
+		if (!FMath::IsNearlyEqual(SortA.X, SortB.X))
+		{
+			return SortA.X < SortB.X;
+		}
+		if (!FMath::IsNearlyEqual(SortA.Y, SortB.Y))
+		{
+			return SortA.Y < SortB.Y;
+		}
+		if (A.bClosed != B.bClosed)
+		{
+			return A.bClosed < B.bClosed;
+		}
+		return A.Points.Num() < B.Points.Num();
+	});
+	for (int32 Index = 0; Index < Contours.Num(); ++Index)
+	{
+		Contours[Index].Id = MakeContourId(TargetHeightMeters, Index);
 	}
 	return Contours;
 }

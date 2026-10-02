@@ -12,6 +12,7 @@ LandscapeHeightmapTracker.HeightZone.*
 LandscapeHeightmapTracker.PaintLayers.*
 LandscapeHeightmapTracker.UI.*
 LandscapeHeightmapTracker.RefreshContent.*
+LandscapeHeightmapTracker.ContourBoxes.*
 ```
 
 The mapper tests cover center, corners, Flip X, Flip Y, transformed Landscapes, non-square bounds, outside rejection, and clamp mode.
@@ -42,6 +43,37 @@ The height-zone tests cover:
   and equal range endpoints without duplicate contours;
 - 8-bit expansion, canonical UE Landscape height decoding, actor Z scale and
   translation, and cache construction.
+
+The contour-box tests cover:
+
+- default `10 m box + 10 m gap = 20 m` placement and expected transforms;
+- horizontal, vertical, and diagonal yaw-only orientation;
+- center Z from contour height, half box height, and Z offset;
+- closed-contour seam handling and short-fragment rejection;
+- the maximum instance guard;
+- independent IDs and actors for same-height connected contours;
+- idempotent Create, Update isolation, exact Delete scope, no-op dirty-state,
+  actor label/folder preservation, and Undo/Redo for creation and deletion.
+
+## Scenario 25 - 3D Contour Boxes
+
+1. Assign a Landscape and load the matching heightmap.
+2. Apply a height zone that produces at least one open and one closed contour.
+3. Verify the contour list contains one row per connected polyline.
+4. Create boxes for one row with defaults and verify 10 × 2 × 10 m boxes with a
+   10 m gap and yaw-only tangent orientation.
+5. Verify the actor is under
+   `LandscapeHeightmapTracker/GeneratedContours/Height_<Value>` and contains one
+   HISM component rather than one actor per box.
+6. Create a second same-height contour and verify it uses an independent actor.
+7. Change all five parameters, Update the first row, and verify the second actor
+   is unchanged.
+8. Repeat Create and verify no duplicate actor appears.
+9. Delete one row, then Undo and Redo; verify only its actor changes.
+10. Delete an actor manually in the Outliner and verify Update/Delete disable and
+    Create can safely recreate it.
+11. Start PIE and verify generated actors are hidden and non-colliding.
+12. Package/cook the project and verify editor-only actors are absent.
 
 The Refresh Content tests cover the strict project-content path policy and verify
 that both refresh commands are registered. Actual filesystem discovery remains an
