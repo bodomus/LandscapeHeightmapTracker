@@ -63,12 +63,9 @@ out/
 Thumbs.db
 desktop.ini
 
-# Added by code-review-graph
+# code-review-graph index (local, rebuilt per machine)
 .code-review-graph/
-graphify-out/
 
-# Unreal generated output
-Binaries/
-DerivedDataCache/
-Intermediate/
-Saved/
+# Claude Code local overrides
+.claude/settings.local.json
+CLAUDE.local.md

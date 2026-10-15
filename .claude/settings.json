@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "sonnet",
+  "enabledMcpjsonServers": ["code-review-graph", "context7"],
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git fetch:*)",
+      "Bash(git switch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(rg:*)",
+      "Bash(code-review-graph:*)",
+      "Bash(uvx code-review-graph:*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/Invoke-Validation.ps1:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run view:*)",
+      "mcp__code-review-graph",
+      "mcp__context7"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git stash drop:*)",
+      "Bash(gh pr merge:*)",
+      "Read(./Build/**)",
+      "Read(./Binaries/**)",
+      "Read(./Intermediate/**)",
+      "Read(./graphify-out/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat >/dev/null; git rev-parse --git-dir >/dev/null 2>&1 && (code-review-graph update --skip-flows >/dev/null 2>&1 || uvx code-review-graph update --skip-flows >/dev/null 2>&1) ; exit 0",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

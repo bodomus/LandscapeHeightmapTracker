@@ -85,3 +85,9 @@ The 3D marker's World Z comes from the current assigned Landscape surface hit. P
 - Height value display and source-vs-Landscape comparison.
 - Tiled Landscape and World Partition overview support.
 - Multiple synchronized overlay layers.
+
+## Development process
+
+AI-assisted workflow (ticket → implementation → independent review), agent rules and
+automation are described in [`Docs/WORKFLOW.md`](Docs/WORKFLOW.md),
+[`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md) and [`Docs/AUTOMATION.md`](Docs/AUTOMATION.md).

@@ -1,0 +1,87 @@
+name: Claude review
+
+# Runs the independent reviewer (Opus) after CI finished successfully on a PR.
+# Disabled until the repository variable LHT_AUTO_REVIEW is set to "true".
+# Requires secret CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY) and the Claude
+# GitHub App installed on the repository. Setup: Docs/AUTOMATION.md
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write        # commit Reviews/review-<ID>.md to the PR branch
+  pull-requests: write   # PR comment
+  actions: read          # read CI run / logs
+  id-token: write        # Claude GitHub App token exchange
+
+jobs:
+  review:
+    if: >-
+      vars.LHT_AUTO_REVIEW == 'true' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: claude-review-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - name: Resolve PR and ticket
+        id: ctx
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+          ticket=$(echo "$BRANCH" | grep -oiE 'UE5-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
+          current=$(git rev-parse HEAD)
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "ticket=$ticket" >> "$GITHUB_OUTPUT"
+          # Skip if the branch moved since CI ran (a newer CI run will trigger us again).
+          if [ "$current" != "$HEAD_SHA" ]; then echo "stale=true" >> "$GITHUB_OUTPUT"; fi
+          if [ -z "$pr" ] || [ -z "$ticket" ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+          echo "PR=#$pr ticket=$ticket head=$current ci_sha=$HEAD_SHA"
+
+      - name: Build code-review-graph index
+        if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.stale != 'true'
+        run: |
+          pip install --quiet code-review-graph
+          code-review-graph build || echo "CRG build failed - reviewer will report degraded analysis"
+
+      - name: Review
+        if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.stale != 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}   # alternative
+          prompt: |
+            You are the independent reviewer running in GitHub Actions.
+            Read and follow `.claude/agents/reviewer.md` exactly, plus `AGENTS.md` and `Docs/WORKFLOW.md`.
+
+            Ticket: ${{ steps.ctx.outputs.ticket }}
+            Branch: ${{ github.event.workflow_run.head_branch }}
+            PR: #${{ steps.ctx.outputs.pr }}
+            Head commit: ${{ github.event.workflow_run.head_sha }}
+            CI run (green, build + automation tests on Windows): ${{ github.event.workflow_run.html_url }}
+
+            CI-specific rules:
+            - You cannot build or run Unreal here; rely on the CI run above as validation evidence
+              (`gh run view ${{ github.event.workflow_run.id }} --log` if you need details).
+            - YouTrack is not reachable from CI: skip YouTrack steps and say so in the PR comment.
+            - The ticket file is `Tickets/<ID>.md` on the branch; if missing, return verdict BLOCKED.
+            - Commit only `Reviews/review-<ID>.md` with message
+              `docs: <ID> review iteration <N> [skip ci]` and push to the branch.
+            - Post the verdict and findings table as a PR comment with `gh pr comment`.
+          claude_args: |
+            --model opus
+            --max-turns 80
+            --allowedTools "Read,Grep,Glob,Write,Edit,Bash(git:*),Bash(gh pr:*),Bash(gh run:*),Bash(code-review-graph:*),mcp__code-review-graph"
