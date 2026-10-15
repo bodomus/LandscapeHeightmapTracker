@@ -132,6 +132,50 @@ The module stores a transient reverse marker world position and weak owner actor
 
 The marker is cleared when the panel is destroyed, when all markers are cleared, when a new Landscape is assigned, when the owner actor becomes invalid, and during module shutdown.
 
+## 3D Contour Boxes
+
+Generated height contours also expose editor-only 3D visualization. The flow is:
+
+```text
+FHeightContour normalized display UV points
+-> FLandscapeCoordinateMapper::MapUVToLocalPosition
+-> assigned Landscape actor transform
+-> FContourBoxPlacement accumulated-length resampling
+-> yaw-only world transforms
+-> one ALHTContourBoxesActor with one HISM per connected contour
+```
+
+`FContourBoxPlacement` is UObject- and Slate-independent. It validates dimensions,
+removes duplicate points, measures world-space XY arc length, applies the
+`BoxLength + GapLength` step, and rejects requests over the 10,000-instance
+limit. A box is emitted only when its complete occupied span fits on the contour.
+Closed contours additionally reserve a gap after the last box, before the first:
+their count is `floor(perimeter / (BoxLength + GapLength))`. Open contours may
+use the final box without a trailing gap. Sampling uses a shared forward segment
+cursor, so traversal costs O(segments + instances), rather than rescanning the
+polyline for every box.
+
+Each connected contour receives a deterministic, versioned geometry digest from
+its exact boundary height, closed flag and canonical undirected display-UV
+segments. Spatial sort controls row order only; adding/removing a sibling cannot
+reassign its actor ID. Reversing traversal or moving the closed trace start does
+not alter identity. Any change to the contour geometry conservatively receives
+a new ID: Update/Delete do not adopt an actor from the old shape. Create makes a
+new set, and old sets remain available for explicit removal in the Outliner.
+Legacy actors using height/ordinal IDs are also deliberately not adopted.
+Actor lookup additionally
+matches the assigned Landscape soft reference, so equal-height contours and
+different Landscapes remain isolated. The actor stores the ID as a UPROPERTY and
+uses the tag `LandscapeHeightmapTracker.GeneratedContourBoxes`; labels and
+Outliner folders are for presentation, not identity.
+
+Create, Update, and Delete are routed through `FContourBoxesEditorService` on the
+editor thread. Create is idempotent, no-op updates do not dirty the level, and
+all real mutations use `FScopedTransaction`, `Modify()`, and transactional actor
+spawning/deletion. Existing actor labels and folders are preserved on update.
+The actor and HISM are editor-only, hidden in game, non-replicated, non-colliding,
+and use Unreal's built-in cube mesh rather than creating a Content Browser asset.
+
 ## Dependencies
 
 The module uses:

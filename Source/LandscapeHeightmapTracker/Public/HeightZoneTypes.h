@@ -22,6 +22,7 @@ struct FHeightZoneSettings
 
 struct FHeightContour
 {
+	FGuid Id;
 	TArray<FVector2D> Points;
 	double BoundaryHeightMeters = 0.0;
 	FLinearColor Color = FLinearColor(1.0f, 0.45f, 0.05f, 1.0f);

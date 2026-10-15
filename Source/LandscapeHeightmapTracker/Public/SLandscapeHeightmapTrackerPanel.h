@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ContourBoxPlacement.h"
 #include "HeightZoneTypes.h"
 #include "LandscapeCoordinateMapper.h"
 #include "LandscapeHeightmapTrackerModule.h"
@@ -48,9 +49,18 @@ private:
 	TSharedRef<ITableRow> GenerateHeightRangeRow(
 		TSharedPtr<int32> Item,
 		const TSharedRef<STableViewBase>& OwnerTable);
+	TSharedRef<ITableRow> GenerateHeightContourRow(
+		TSharedPtr<int32> Item,
+		const TSharedRef<STableViewBase>& OwnerTable);
 	void OnHeightRangeSelectionChanged(TSharedPtr<int32> Item, ESelectInfo::Type SelectInfo);
 	void SetHeightRangeEnabled(int32 RangeIndex, ECheckBoxState NewState);
 	void RefreshHeightRangeListItems();
+	void RefreshHeightContourListItems();
+	FReply CreateContourBoxes(int32 ContourIndex);
+	FReply UpdateContourBoxes(int32 ContourIndex);
+	FReply DeleteContourBoxes(int32 ContourIndex);
+	bool HasContourBoxes(int32 ContourIndex) const;
+	const FHeightContour* GetHeightContour(int32 ContourIndex) const;
 	bool RebuildMultiHeightRangeVisualization(FString& OutError);
 	bool CanRemoveSelectedHeightRange() const;
 	void OnObjectSelected(const FAssetData& AssetData);
@@ -141,6 +151,9 @@ private:
 	TArray<TSharedPtr<int32>> HeightRangeListItems;
 	TSharedPtr<int32> SelectedHeightRangeItem;
 	TSharedPtr<SListView<TSharedPtr<int32>>> HeightRangeListView;
+	FContourBoxSettings ContourBoxSettings;
+	TArray<TSharedPtr<int32>> HeightContourListItems;
+	TSharedPtr<SListView<TSharedPtr<int32>>> HeightContourListView;
 	FText StatusText;
 	bool bHasHeightmapImageInfo = false;
 	bool bSourceImageIsGrayscale = false;

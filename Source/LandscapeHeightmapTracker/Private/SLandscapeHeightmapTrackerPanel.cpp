@@ -1,6 +1,7 @@
 #include "SLandscapeHeightmapTrackerPanel.h"
 
 #include "DesktopPlatformModule.h"
+#include "ContourBoxesEditorService.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Engine/Texture2D.h"
@@ -21,6 +22,7 @@
 #include "LandscapeProxy.h"
 #include "LandscapeSurfaceTraceHelper.h"
 #include "LandscapeTrackerSettings.h"
+#include "LHTContourBoxesActor.h"
 #include "Misc/FileHelper.h"
 #include "Misc/MessageDialog.h"
 #include "Modules/ModuleManager.h"
@@ -36,6 +38,7 @@
 #include "Widgets/Input/SNumericEntryBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SGridPanel.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Views/STableRow.h"
@@ -574,6 +577,81 @@ void SLandscapeHeightmapTrackerPanel::Construct(const FArguments& InArgs)
 						.OnClicked(this, &SLandscapeHeightmapTrackerPanel::ClearHeightZone)
 				]
 			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 12.0f, 8.0f, 4.0f)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("ContourBoxesHeader", "3D Contour Boxes"))
+				.Font(FAppStyle::GetFontStyle("SmallFontBold"))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f, 8.0f, 4.0f)
+			[
+				SNew(SGridPanel)
+				+ SGridPanel::Slot(0, 0).Padding(0.0f, 2.0f, 8.0f, 2.0f).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(LOCTEXT("ContourBoxLengthLabel", "Box Length, m"))
+				]
+				+ SGridPanel::Slot(1, 0).Padding(0.0f, 2.0f)
+				[
+					SNew(SNumericEntryBox<double>)
+					.AllowSpin(true).MinValue(0.01).MinDesiredValueWidth(100.0f)
+					.Value_Lambda([this]() { return TOptional<double>(ContourBoxSettings.BoxLengthMeters); })
+					.OnValueChanged_Lambda([this](double Value) { ContourBoxSettings.BoxLengthMeters = Value; })
+				]
+				+ SGridPanel::Slot(0, 1).Padding(0.0f, 2.0f, 8.0f, 2.0f).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(LOCTEXT("ContourBoxHeightLabel", "Box Height, m"))
+				]
+				+ SGridPanel::Slot(1, 1).Padding(0.0f, 2.0f)
+				[
+					SNew(SNumericEntryBox<double>)
+					.AllowSpin(true).MinValue(0.01).MinDesiredValueWidth(100.0f)
+					.Value_Lambda([this]() { return TOptional<double>(ContourBoxSettings.BoxHeightMeters); })
+					.OnValueChanged_Lambda([this](double Value) { ContourBoxSettings.BoxHeightMeters = Value; })
+				]
+				+ SGridPanel::Slot(0, 2).Padding(0.0f, 2.0f, 8.0f, 2.0f).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(LOCTEXT("ContourBoxThicknessLabel", "Box Thickness, m"))
+				]
+				+ SGridPanel::Slot(1, 2).Padding(0.0f, 2.0f)
+				[
+					SNew(SNumericEntryBox<double>)
+					.AllowSpin(true).MinValue(0.01).MinDesiredValueWidth(100.0f)
+					.Value_Lambda([this]() { return TOptional<double>(ContourBoxSettings.BoxThicknessMeters); })
+					.OnValueChanged_Lambda([this](double Value) { ContourBoxSettings.BoxThicknessMeters = Value; })
+				]
+				+ SGridPanel::Slot(0, 3).Padding(0.0f, 2.0f, 8.0f, 2.0f).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(LOCTEXT("ContourBoxGapLabel", "Gap Length, m"))
+				]
+				+ SGridPanel::Slot(1, 3).Padding(0.0f, 2.0f)
+				[
+					SNew(SNumericEntryBox<double>)
+					.AllowSpin(true).MinValue(0.0).MinDesiredValueWidth(100.0f)
+					.Value_Lambda([this]() { return TOptional<double>(ContourBoxSettings.GapLengthMeters); })
+					.OnValueChanged_Lambda([this](double Value) { ContourBoxSettings.GapLengthMeters = Value; })
+				]
+				+ SGridPanel::Slot(0, 4).Padding(0.0f, 2.0f, 8.0f, 2.0f).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(LOCTEXT("ContourBoxZOffsetLabel", "Z Offset, m"))
+				]
+				+ SGridPanel::Slot(1, 4).Padding(0.0f, 2.0f)
+				[
+					SNew(SNumericEntryBox<double>)
+					.AllowSpin(true).MinDesiredValueWidth(100.0f)
+					.Value_Lambda([this]() { return TOptional<double>(ContourBoxSettings.ZOffsetMeters); })
+					.OnValueChanged_Lambda([this](double Value) { ContourBoxSettings.ZOffsetMeters = Value; })
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(8.0f, 0.0f, 8.0f, 4.0f)
+			[
+				SNew(SBox).HeightOverride(180.0f)
+				[
+					SAssignNew(HeightContourListView, SListView<TSharedPtr<int32>>)
+					.ListItemsSource(&HeightContourListItems)
+					.SelectionMode(ESelectionMode::None)
+					.OnGenerateRow(this, &SLandscapeHeightmapTrackerPanel::GenerateHeightContourRow)
+				]
+			]
 			+ SVerticalBox::Slot().FillHeight(1.0f).MinHeight(320.0f).Padding(0.0f, 8.0f, 0.0f, 0.0f)
 			[
 				SNew(SBorder)
@@ -978,6 +1056,170 @@ TSharedRef<ITableRow> SLandscapeHeightmapTrackerPanel::GenerateHeightRangeRow(
 	];
 }
 
+TSharedRef<ITableRow> SLandscapeHeightmapTrackerPanel::GenerateHeightContourRow(
+	TSharedPtr<int32> Item,
+	const TSharedRef<STableViewBase>& OwnerTable)
+{
+	const int32 ContourIndex = Item.IsValid() ? *Item : INDEX_NONE;
+	return SNew(STableRow<TSharedPtr<int32>>, OwnerTable)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(3.0f)
+		[
+			SNew(STextBlock)
+			.Text_Lambda([this, ContourIndex]()
+			{
+				const FHeightContour* Contour = GetHeightContour(ContourIndex);
+				if (!Contour)
+				{
+					return FText::GetEmpty();
+				}
+				return FText::Format(
+					LOCTEXT("HeightContourRow", "{0} m · #{1} · {2} · {3} points"),
+					FText::AsNumber(Contour->BoundaryHeightMeters),
+					FText::AsNumber(ContourIndex + 1),
+					Contour->bClosed ? LOCTEXT("ClosedContour", "closed") : LOCTEXT("OpenContour", "open"),
+					FText::AsNumber(Contour->Points.Num()));
+			})
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(2.0f)
+		[
+			SNew(SButton)
+			.Text(LOCTEXT("CreateContourBoxes", "Create 3D Boxes"))
+			.OnClicked_Lambda([this, ContourIndex]() { return CreateContourBoxes(ContourIndex); })
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(2.0f)
+		[
+			SNew(SButton)
+			.Text(LOCTEXT("UpdateContourBoxes", "Update 3D Boxes"))
+			.IsEnabled_Lambda([this, ContourIndex]() { return HasContourBoxes(ContourIndex); })
+			.OnClicked_Lambda([this, ContourIndex]() { return UpdateContourBoxes(ContourIndex); })
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(2.0f)
+		[
+			SNew(SButton)
+			.Text(LOCTEXT("DeleteContourBoxes", "Delete 3D Boxes"))
+			.IsEnabled_Lambda([this, ContourIndex]() { return HasContourBoxes(ContourIndex); })
+			.OnClicked_Lambda([this, ContourIndex]() { return DeleteContourBoxes(ContourIndex); })
+		]
+	];
+}
+
+void SLandscapeHeightmapTrackerPanel::RefreshHeightContourListItems()
+{
+	HeightContourListItems.Reset();
+	if (const TArray<FHeightContour>* Contours = GetActiveHeightContours())
+	{
+		for (int32 Index = 0; Index < Contours->Num(); ++Index)
+		{
+			HeightContourListItems.Add(MakeShared<int32>(Index));
+		}
+	}
+	if (HeightContourListView.IsValid())
+	{
+		HeightContourListView->RequestListRefresh();
+	}
+}
+
+FReply SLandscapeHeightmapTrackerPanel::CreateContourBoxes(int32 ContourIndex)
+{
+	const FHeightContour* Contour = GetHeightContour(ContourIndex);
+	if (!Contour || !AssignedLandscape.IsValid())
+	{
+		UpdateStatus(LOCTEXT("CreateContourBoxesUnavailable", "Create 3D Boxes requires a generated contour and an assigned Landscape."));
+		return FReply::Handled();
+	}
+	FLandscapeTrackerMappingOptions MappingOptions;
+	MappingOptions.bFlipX = bFlipX;
+	MappingOptions.bFlipY = bFlipY;
+	ALHTContourBoxesActor* Actor = nullptr;
+	FString Error;
+	if (!FContourBoxesEditorService::CreateOrUpdate(
+		AssignedLandscape.Get(),
+		LocalBounds,
+		MappingOptions,
+		*Contour,
+		ContourBoxSettings,
+		false,
+		Actor,
+		Error))
+	{
+		UpdateStatus(FText::Format(LOCTEXT("CreateContourBoxesFailed", "3D boxes could not be created: {0}"), FText::FromString(Error)));
+		return FReply::Handled();
+	}
+	UpdateStatus(FText::Format(
+		LOCTEXT("CreateContourBoxesSucceeded", "3D boxes ready: {0} instances in {1}."),
+		FText::AsNumber(Actor ? Actor->GetInstanceCount() : 0),
+		FText::FromString(Actor ? Actor->GetActorLabel() : FString())));
+	return FReply::Handled();
+}
+
+FReply SLandscapeHeightmapTrackerPanel::UpdateContourBoxes(int32 ContourIndex)
+{
+	const FHeightContour* Contour = GetHeightContour(ContourIndex);
+	if (!Contour || !AssignedLandscape.IsValid())
+	{
+		UpdateStatus(LOCTEXT("UpdateContourBoxesUnavailable", "Update 3D Boxes requires a generated contour and an assigned Landscape."));
+		return FReply::Handled();
+	}
+	FLandscapeTrackerMappingOptions MappingOptions;
+	MappingOptions.bFlipX = bFlipX;
+	MappingOptions.bFlipY = bFlipY;
+	ALHTContourBoxesActor* Actor = nullptr;
+	FString Error;
+	if (!FContourBoxesEditorService::CreateOrUpdate(
+		AssignedLandscape.Get(),
+		LocalBounds,
+		MappingOptions,
+		*Contour,
+		ContourBoxSettings,
+		true,
+		Actor,
+		Error))
+	{
+		UpdateStatus(FText::Format(LOCTEXT("UpdateContourBoxesFailed", "3D boxes could not be updated: {0}"), FText::FromString(Error)));
+		return FReply::Handled();
+	}
+	UpdateStatus(FText::Format(
+		LOCTEXT("UpdateContourBoxesSucceeded", "3D boxes updated: {0} instances."),
+		FText::AsNumber(Actor ? Actor->GetInstanceCount() : 0)));
+	return FReply::Handled();
+}
+
+FReply SLandscapeHeightmapTrackerPanel::DeleteContourBoxes(int32 ContourIndex)
+{
+	const FHeightContour* Contour = GetHeightContour(ContourIndex);
+	if (!Contour || !AssignedLandscape.IsValid())
+	{
+		UpdateStatus(LOCTEXT("DeleteContourBoxesUnavailable", "Delete 3D Boxes requires a generated contour and an assigned Landscape."));
+		return FReply::Handled();
+	}
+	bool bChanged = false;
+	FString Error;
+	if (!FContourBoxesEditorService::Delete(AssignedLandscape.Get(), Contour->Id, bChanged, Error))
+	{
+		UpdateStatus(FText::Format(LOCTEXT("DeleteContourBoxesFailed", "3D boxes could not be deleted: {0}"), FText::FromString(Error)));
+		return FReply::Handled();
+	}
+	UpdateStatus(bChanged
+		? LOCTEXT("DeleteContourBoxesSucceeded", "3D boxes deleted.")
+		: LOCTEXT("DeleteContourBoxesAlreadyMissing", "The 3D boxes actor was already absent."));
+	return FReply::Handled();
+}
+
+bool SLandscapeHeightmapTrackerPanel::HasContourBoxes(int32 ContourIndex) const
+{
+	const FHeightContour* Contour = GetHeightContour(ContourIndex);
+	return Contour && AssignedLandscape.IsValid() &&
+		FContourBoxesEditorService::FindActor(AssignedLandscape.Get(), Contour->Id) != nullptr;
+}
+
+const FHeightContour* SLandscapeHeightmapTrackerPanel::GetHeightContour(int32 ContourIndex) const
+{
+	const TArray<FHeightContour>* Contours = GetActiveHeightContours();
+	return Contours && Contours->IsValidIndex(ContourIndex) ? &(*Contours)[ContourIndex] : nullptr;
+}
+
 void SLandscapeHeightmapTrackerPanel::OnHeightRangeSelectionChanged(
 	TSharedPtr<int32> Item,
 	ESelectInfo::Type SelectInfo)
@@ -1047,6 +1289,7 @@ bool SLandscapeHeightmapTrackerPanel::RebuildMultiHeightRangeVisualization(FStri
 	}
 
 	bUsingMultiRangeVisualization = true;
+	RefreshHeightContourListItems();
 	if (!UpdateHeightZoneTexture(OutError))
 	{
 		return false;
@@ -1136,6 +1379,7 @@ bool SLandscapeHeightmapTrackerPanel::ConfigureMultiHeightRangePreviewForTesting
 	RefreshHeightRangeListItems();
 	MultiHeightRangeResult = FHeightRangeGenerator::Generate(HeightMeters, Width, Height, HeightRanges);
 	bUsingMultiRangeVisualization = true;
+	RefreshHeightContourListItems();
 	HeightZoneSettings.bEnabled = true;
 	HeightZoneSettings.Mode = EHeightZoneMode::Range;
 	UpdateStatus(LOCTEXT("MultiHeightRangePreviewStatus", "Synthetic UE5-17 preview with three enabled ranges."));
@@ -1216,6 +1460,7 @@ FReply SLandscapeHeightmapTrackerPanel::ApplyHeightZone()
 		HeightZoneSettings.HeightAMeters,
 		HeightZoneSettings.HeightBMeters,
 		HeightZoneSettings.Mode);
+	RefreshHeightContourListItems();
 	if (HeightZoneResult.Mask.Num() != ImageSize.X * ImageSize.Y)
 	{
 		UpdateStatus(LOCTEXT("HeightZoneGenerationFailed", "Height zone generation failed."));
@@ -1837,6 +2082,7 @@ void SLandscapeHeightmapTrackerPanel::ClearHeightZoneVisualization()
 	HeightZoneResult = FHeightZoneResult();
 	MultiHeightRangeResult = FMultiHeightRangeResult();
 	bUsingMultiRangeVisualization = false;
+	RefreshHeightContourListItems();
 	ReleaseHeightZoneTexture();
 	InvalidateHeightmapMarkerPaint();
 }

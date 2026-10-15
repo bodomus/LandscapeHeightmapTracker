@@ -1,5 +1,7 @@
 #include "HeightZoneGenerator.h"
 
+#include "Misc/SecureHash.h"
+
 namespace
 {
 struct FContourSegment
@@ -7,6 +9,72 @@ struct FContourSegment
 	FVector2D A;
 	FVector2D B;
 };
+
+bool PointLess(const FVector2D& A, const FVector2D& B)
+{
+	return A.X < B.X || (A.X == B.X && A.Y < B.Y);
+}
+
+FGuid MakeContourId(const FHeightContour& Contour)
+{
+	// Exact geometry is deliberately conservative: a changed shape gets a new
+	// identity rather than guessing which old actor a split/merge belongs to.
+	// Canonical undirected segments ignore trace direction and closed-loop start.
+	TArray<FContourSegment> Segments;
+	const int32 PointCount = Contour.Points.Num();
+	const int32 SegmentCount = Contour.bClosed ? PointCount : PointCount - 1;
+	for (int32 Index = 0; Index < SegmentCount; ++Index)
+	{
+		FVector2D A = Contour.Points[Index];
+		FVector2D B = Contour.Points[(Index + 1) % PointCount];
+		if (A == B)
+		{
+			continue;
+		}
+		if (PointLess(B, A))
+		{
+			Swap(A, B);
+		}
+		Segments.Add({A, B});
+	}
+	Segments.Sort([](const FContourSegment& A, const FContourSegment& B)
+	{
+		return A.A == B.A ? PointLess(A.B, B.B) : PointLess(A.A, B.A);
+	});
+
+	FMD5 Digest;
+	const ANSICHAR Namespace[] = "LHT.ContourGeometry.v1";
+	Digest.Update(reinterpret_cast<const uint8*>(Namespace), sizeof(Namespace));
+	Digest.Update(reinterpret_cast<const uint8*>(&Contour.BoundaryHeightMeters), sizeof(double));
+	const uint8 Closed = Contour.bClosed ? 1 : 0;
+	Digest.Update(&Closed, sizeof(Closed));
+	const int32 Count = Segments.Num();
+	Digest.Update(reinterpret_cast<const uint8*>(&Count), sizeof(Count));
+	for (const FContourSegment& Segment : Segments)
+	{
+		// Hash coordinates separately, without struct padding or lossy rounding.
+		for (const double Coordinate : {Segment.A.X, Segment.A.Y, Segment.B.X, Segment.B.Y})
+		{
+			Digest.Update(reinterpret_cast<const uint8*>(&Coordinate), sizeof(Coordinate));
+		}
+	}
+	FMD5Hash Hash;
+	Hash.Set(Digest);
+	return MD5HashToGuid(Hash);
+}
+
+FVector2D GetContourSortPoint(const FHeightContour& Contour)
+{
+	FVector2D Result(TNumericLimits<double>::Max(), TNumericLimits<double>::Max());
+	for (const FVector2D& Point : Contour.Points)
+	{
+		if (Point.X < Result.X || (FMath::IsNearlyEqual(Point.X, Result.X) && Point.Y < Result.Y))
+		{
+			Result = Point;
+		}
+	}
+	return Result;
+}
 
 struct FContourNode
 {
@@ -241,6 +309,28 @@ TArray<FHeightContour> GenerateContours(
 			Point.X /= Width - 1;
 			Point.Y /= Height - 1;
 		}
+	}
+	Contours.Sort([](const FHeightContour& A, const FHeightContour& B)
+	{
+		const FVector2D SortA = GetContourSortPoint(A);
+		const FVector2D SortB = GetContourSortPoint(B);
+		if (!FMath::IsNearlyEqual(SortA.X, SortB.X))
+		{
+			return SortA.X < SortB.X;
+		}
+		if (!FMath::IsNearlyEqual(SortA.Y, SortB.Y))
+		{
+			return SortA.Y < SortB.Y;
+		}
+		if (A.bClosed != B.bClosed)
+		{
+			return A.bClosed < B.bClosed;
+		}
+		return A.Points.Num() < B.Points.Num();
+	});
+	for (FHeightContour& Contour : Contours)
+	{
+		Contour.Id = MakeContourId(Contour);
 	}
 	return Contours;
 }
