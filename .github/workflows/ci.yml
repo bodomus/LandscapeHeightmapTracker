@@ -1,0 +1,50 @@
+name: CI
+
+# Builds the plugin in a host project and runs its automation tests on a
+# self-hosted Windows runner with Unreal Engine 5.7 installed.
+# Disabled until the repository variable LHT_SELF_HOSTED_CI is set to "true".
+# Setup: Docs/AUTOMATION.md
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    # Never run code from forks on the self-hosted runner.
+    if: >-
+      vars.LHT_SELF_HOSTED_CI == 'true' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Windows, ue57]
+    timeout-minutes: 120
+    env:
+      LHT_UE_ROOT: ${{ vars.LHT_UE_ROOT }}
+      LHT_HOST_UPROJECT: ${{ vars.LHT_CI_HOST_UPROJECT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run automation tests
+        shell: powershell
+        run: >-
+          powershell -NoProfile -ExecutionPolicy Bypass
+          -File Scripts/Invoke-Validation.ps1 -SyncPluginToHost
+
+      - name: Upload logs and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-${{ github.run_id }}
+          path: Saved/Validation/
+          retention-days: 14
+          if-no-files-found: ignore

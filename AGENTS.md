@@ -1,62 +1,17 @@
 # AGENTS.md
 
-## Mandatory pre-ticket workflow
+Tool-neutral rules for any AI agent working in this repository (Claude Code,
+Codex, others). Agent-specific additions live in `CLAUDE.md` and `.claude/`.
 
-Before starting any non-trivial ticket, feature, bugfix, refactor, investigation,
-implementation-planning, or review task:
+The end-to-end process (ticket → implementation → review → merge) is defined in
+[`Docs/WORKFLOW.md`](Docs/WORKFLOW.md). Read it before any non-trivial task.
 
-1. Resolve the repository root with:
-
-   ```powershell
-   git rev-parse --show-toplevel
-   ```
-
-2. Read the repository-root file `.codex/PRE_TICKET_WORKFLOW.md`.
-3. Use `$graphify-repository-analysis`.
-4. Use `$code-review-graph-analysis`.
-5. Execute all applicable preflight phases.
-6. Do not begin implementation until repository-intelligence preflight is complete.
-7. After implementation, update CRG, inspect impact radius, run validation, and
-   refresh Graphify when required by the workflow.
-
-For trivial spelling, formatting, comment-only, or metadata-only changes, the full
-graph preflight may be skipped when graph context cannot affect correctness.
-
-## Repository intelligence
-
-This project uses two complementary systems:
-
-1. **Graphify**
-   - architectural exploration;
-   - subsystem discovery;
-   - semantic and cross-file relationships;
-   - candidate entry-point discovery.
-
-2. **code-review-graph (CRG)**
-   - structural code analysis;
-   - exact symbol relationships;
-   - callers, callees, imports, inheritance, and dependants;
-   - review scoping and impact analysis.
-
-Before implementing non-trivial changes:
-
-1. verify graph availability and freshness;
-2. query Graphify for architectural context when required by the workflow level;
-3. query CRG for concrete symbol dependencies;
-4. validate important graph findings against source code;
-5. inspect tests covering the affected subsystem.
-
-After implementation:
-
-1. update CRG;
-2. inspect blast radius and review context;
-3. run affected tests and required builds;
-4. update Graphify only when architecture, subsystem boundaries, important entry
-   points, or cross-module relationships changed.
+Project-specific domain rules: [`Docs/PROJECT_RULES.md`](Docs/PROJECT_RULES.md).
 
 ## Project scope
 
-This repository contains an Unreal Engine C++ editor plugin.
+This repository contains an Unreal Engine 5.7 C++ **editor-only** plugin
+(`LandscapeHeightmapTracker`, module type `Editor`).
 
 Analysis and implementation must account for:
 
@@ -66,79 +21,54 @@ Analysis and implementation must account for:
 - Slate widget construction, attributes, callbacks, and ownership;
 - Unreal macros and reflection-style APIs;
 - object lifetime, weak references, garbage collection, and editor-only state;
+- transactions (`FScopedTransaction`, `Modify()`), Undo/Redo and package dirtying;
 - coordinate transforms, bounds, landscape components, heightmap mapping, and
   marker state;
 - host-project and Unreal Engine version constraints.
 
 ## Repository layout
 
-- `Source/` — production plugin source and tests colocated with source, if any.
-- `Resources/` — plugin resources and editor assets.
-- `Config/` — plugin configuration.
-- `Docs/` — maintained project documentation.
-- `Tickets/` — ticket specifications and acceptance criteria.
-- `Task/` — active task artifacts.
-- `Reviews/` — code-review reports and verdicts.
-- `evaluation/` — historical Graphify/CRG benchmark and comparison artifacts.
-- `graphify-out/` — current generated Graphify working graph.
-- `.code-review-graph/` — current generated CRG state.
-- `.codex/` — Codex workflows and repository automation.
-- `.agents/skills/` — repository-local Codex skills.
+- `Source/` — production plugin source; automation tests in `Source/*/Private/Tests/`.
+- `Resources/`, `Config/` — plugin resources and configuration.
+- `Docs/` — maintained project documentation and process (`WORKFLOW.md`, `AUTOMATION.md`).
+- `Scripts/` — build, packaging and validation scripts.
+- `Tickets/<ID>.md` — ticket specification and acceptance criteria (mirror of YouTrack).
+- `Task/<ID>/` — working artifacts of the implementer: `plan.md`, `report.md`.
+- `Reviews/review-<ID>.md` — review reports. **Written only by the reviewer.**
+- `evaluation/` — historical Graphify/CRG benchmark (read-only archive).
+- `.code-review-graph/` — generated CRG database (gitignored).
+- `.claude/` — Claude Code skills, agents and settings.
+- `.github/workflows/` — CI and automated review.
 
 ## Generated and non-source directories
 
-Do not treat these as production source:
+Never treat these as production source and never edit them by hand:
+`.git/`, `.idea/`, `.vs/`, `Binaries/`, `Build/`, `DerivedDataCache/`,
+`Intermediate/`, `Saved/`, `.code-review-graph/`, `graphify-out/`.
 
-- `.git/`
-- `.idea/`
-- `.vs/`
-- `Binaries/`
-- `DerivedDataCache/`
-- `Intermediate/`
-- `Saved/`
-- `.code-review-graph/`
-- `graphify-out/`
+`Build/` contains local packaging output and full copies of the plugin
+(including a nested `.git`). It is gitignored and must be excluded from every
+search and index.
 
-Inspect `Build/` before excluding it. Unreal plugin packaging metadata or resources
-may be stored there.
+## Code intelligence
 
-Do not manually edit generated Unreal build artifacts.
-
-Do not include generated, cache, database, model, or vendor directories in
-Graphify or CRG indexing unless the ticket explicitly concerns them.
-
-## Code-intelligence routing
-
-- Use Graphify for unfamiliar subsystem orientation, broad architecture discovery,
-  semantic relationships, and cross-file candidate discovery.
-- Use CRG for exact symbol lookup, callers, callees, imports, inheritance,
-  dependants, compact local graph facts, review context, and impact analysis.
-- Treat graph tools as candidate generators.
-- Do not treat graph paths, communities, inferred flows, or impact radius as
-  verified execution behavior.
-- Use direct `rg` searches and source inspection as the authority for exact
-  callers, callees, registrations, and runtime flow.
-- Verify Unreal delegates, Slate attributes, lambdas, macros, module lifecycle,
-  editor-mode lifecycle, and event wiring in source before making claims.
-- Use targeted exhaustive search for absence claims.
-- Check graph/index freshness before trusting graph results.
-- When Graphify, CRG, and source disagree, source evidence wins.
+- **code-review-graph (CRG)** is the structural index: symbols, callers, callees,
+  inheritance, dependants, review context, impact radius. Prefer its MCP tools
+  over reading many files — it saves context.
+- **Graphify is not used** in the current workflow. Do not run or rebuild it.
+  `graphify-out/` and `evaluation/` are historical.
+- Graph results are *candidates*. Exact callers, registrations, delegate wiring,
+  Slate attributes, lambdas, macros and lifecycle must be verified in source
+  (`rg` + reading the file). When the graph and source disagree, source wins.
+- Use targeted exhaustive search (`rg`) for absence claims.
+- Check graph freshness before trusting it (`code-review-graph update`).
 
 ## Unreal runtime-flow verification
 
-Prove runtime paths with source evidence such as:
-
-- direct calls;
-- delegate subscription and removal;
-- delegate broadcast;
-- Slate callbacks and attributes;
-- widget construction and ownership;
-- Unreal lifecycle registration;
-- explicit state writes and reads;
-- command registration;
-- editor-mode activation;
-- viewport event routing.
-
+Prove runtime paths with source evidence: direct calls, delegate subscription
+and removal, broadcast, Slate callbacks and attributes, widget construction and
+ownership, lifecycle registration, explicit state writes/reads, command
+registration, editor-mode activation, viewport event routing.
 Graph connectivity alone is insufficient.
 
 ## Change safety
@@ -146,61 +76,42 @@ Graph connectivity alone is insufficient.
 - Do not modify production code during investigation-only tasks.
 - Do not overwrite, reset, clean, stash, revert, or otherwise destroy pre-existing
   user changes.
-- Keep implementation scope aligned with the ticket.
-- Avoid unrelated refactoring.
+- Keep scope aligned with the ticket; no unrelated refactoring.
 - Preserve public behavior unless the ticket explicitly changes it.
-- For impact analysis, distinguish direct impact, adjacent impact, test-only
-  impact, and graph-proximity noise.
 - Mapper changes require inspection of forward mapping, reverse mapping, UI marker
   state, transforms, bounds handling, and tests.
+- Every new or changed behavior gets an automation test unless the ticket says
+  otherwise or it is genuinely untestable (state why in the report).
 
-## Search authority
+## Git conventions
 
-For exact questions:
-
-1. use `rg`;
-2. inspect source;
-3. verify line-level evidence;
-4. inspect registration, configuration, and tests.
-
-Graphify and CRG may suggest where to look, but source code remains authoritative.
+- One branch per ticket: `feature/<ID>-<short-kebab-name>` (bugs: `fix/<ID>-...`,
+  process/tooling: `chore/...`). Never commit directly to `main`.
+- Conventional commit prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`,
+  `chore:`, `ci:`. Include the ticket ID: `feat: UE5-21 add ...`.
+- Merge to `main` only through a PR, after green CI, reviewer verdict `APPROVE`
+  and — when the ticket requires it — the owner's manual visual verification.
+  The merge itself is done by the owner.
 
 ## Build and validation
 
-The plugin normally requires a host Unreal project and an installed Unreal Engine
-version for compilation and runtime validation.
+- Engine: Unreal Engine 5.7 (Win64). Builds and tests run only on Windows with
+  the engine installed; they cannot run in Linux/cloud sandboxes.
+- Use `Scripts/Invoke-Validation.ps1` (build + automation tests). Machine-specific
+  paths come from environment variables (`LHT_UE_ROOT`, `LHT_HOST_UPROJECT`),
+  never from committed files.
+- For every build or test run record the exact command, result and relevant
+  failure output.
+- Never claim a build or test passed unless it actually ran and passed. If it
+  could not run, say so explicitly and why.
 
-Before building, identify:
+## Definition of done (implementer)
 
-- repository root;
-- host `.uproject`;
-- Unreal Engine installation and version;
-- target editor configuration;
-- plugin installation mode;
-- documented build/test wrappers.
+- ticket acceptance criteria addressed one by one;
+- smallest coherent change, scope respected;
+- CRG updated and impact radius inspected after the change;
+- build and automation tests run (or explicitly reported as unavailable);
+- `Task/<ID>/report.md` updated with evidence, risks and unverified assumptions;
+- branch pushed and PR opened.
 
-Do not invent machine-specific Unreal paths.
-
-Prefer repository-provided scripts when present.
-
-For every build or test run, record:
-
-- exact command;
-- working directory;
-- result;
-- relevant failure output.
-
-Do not claim a build or test passed unless it was actually executed successfully.
-
-## Definition of done
-
-A non-trivial ticket is not complete until:
-
-- the applicable pre-ticket workflow was executed;
-- important graph findings were validated against source;
-- the smallest coherent implementation was completed;
-- CRG was updated after changes;
-- post-change impact was inspected;
-- required tests and builds were run or explicitly reported as unavailable;
-- remaining risks and unverified assumptions were documented;
-- an implementation report was produced.
+The ticket is **not** done until the reviewer writes verdict `APPROVE`.
